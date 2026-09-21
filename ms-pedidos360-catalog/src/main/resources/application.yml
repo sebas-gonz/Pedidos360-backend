@@ -1,0 +1,26 @@
+server:
+  port: 8082
+
+spring:
+    application:
+        name: ms-pedidos360-catalog
+    main:
+      web-application-type: reactive
+
+    r2dbc:
+      url: r2dbc:postgresql://localhost:5432/ms-catalog?scheme=catalog
+      username: postgres
+      password: root
+
+    flyway:
+      enabled: true
+      url: jdbc:postgresql://localhost:5432/ms-catalog
+      password: root
+      user: postgres
+      baseline-on-migrate: true
+      schemas: catalog
+      default-schema: catalog
+
+    output:
+      ansi:
+        enabled: always

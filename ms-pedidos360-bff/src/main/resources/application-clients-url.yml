@@ -1,0 +1,11 @@
+clients:
+  orders:
+    url: ${ORDERS_URL:http://localhost:8081}
+  catalog:
+    url: ${CATALOG_URL:http://localhost:8082}
+  notify:
+    url: ${NOTIFY_URL:http://localhost:8083}
+  report:
+    url: ${REPORT_URL:http://localhost:8084}
+  audit:
+    url: ${AUDIT_URL:http://localhost:8085}

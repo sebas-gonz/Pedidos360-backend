@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: ms-pedidos360-order
+
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/ms-orders?scheme=orders
+    username: ${DB-USER:postgres}
+    password: ${DB-PASSWORD:root}
+
+  flyway:
+    url: jdbc:postgresql://localhost:5432/ms-orders
+    user: ${spring.r2dbc.username}
+    password: ${spring.r2dbc.password}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    default-schema: orders
+
+  output:
+    ansi:
+      enabled: always
+
+server:
+  port: 8081
+
+logging:
+  level:
+    org:
+      springframework:
+        r2dbc: DEBUG
+

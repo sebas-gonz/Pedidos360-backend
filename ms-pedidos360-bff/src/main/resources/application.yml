@@ -1,0 +1,9 @@
+spring:
+    application:
+        name: ms-pedidos360-bff
+    security:
+      oauth2:
+        resourceserver:
+          jwt:
+            issuer-uri: https://login.microsoftonline.com/38d3da59-de9f-41b2-8e22-64e7660d479d/v2.0
+

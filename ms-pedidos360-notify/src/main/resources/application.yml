@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: ms-pedidos360-notify
+  mail:
+    host: smtp.gmail.com
+    port: 465
+    username: sebastian.javier.gon@gmail.com
+    password: ${MAIL-PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+server:
+  port: 8083
