@@ -2,12 +2,12 @@ spring:
   application:
     name: ms-pedidos360-report
   r2dbc:
-    url: r2dbc:postgresql://localhost:5432/ms-reports?search_path=reports
-    username: ${DB-USER:postgres}
-    password: ${DB-PASSWORD:root}
+    url: r2dbc:${DB_URL:postgresql://localhost:5432/ms-reports?search_path=reports}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:root}
 
   flyway:
-    url: jdbc:postgresql://localhost:5432/ms-reports
+    url: jdbc:${DB_URL:postgresql://localhost:5432/ms-reports}
     user: ${spring.r2dbc.username}
     password: ${spring.r2dbc.password}
     locations: classpath:db/migration

@@ -27,16 +27,23 @@ public class SecurityConfig {
                 .authorizeExchange(exchanges -> exchanges
                         .pathMatchers("/actuator/health").permitAll()
 
+                        // Catálogo
                         .pathMatchers(HttpMethod.POST, "/api/catalog/**").hasRole("Admin")
                         .pathMatchers(HttpMethod.PUT, "/api/catalog/**").hasRole("Admin")
                         .pathMatchers(HttpMethod.DELETE, "/api/catalog/**").hasRole("Admin")
                         .pathMatchers(HttpMethod.GET, "/api/catalog/**").authenticated()
 
+                        // Reportes y Auditoría
                         .pathMatchers("/api/reports/**").hasRole("Admin")
-
                         .pathMatchers("/api/audit/**").hasRole("Auditor")
 
-                        .pathMatchers("/api/orders/**").hasAnyRole("Cliente", "Operador", "Admin")
+                        .pathMatchers(HttpMethod.GET, "/api/orders").hasAnyRole("Admin", "Operador")
+                        .pathMatchers(HttpMethod.GET, "/api/orders/status/**").hasAnyRole("Admin", "Operador")
+
+                        .pathMatchers(HttpMethod.PUT, "/api/orders/*/status").hasAnyRole("Admin", "Operador")
+
+                        .pathMatchers(HttpMethod.POST, "/api/orders").hasAnyRole("Cliente", "Operador", "Admin")
+                        .pathMatchers(HttpMethod.GET, "/api/orders/users/*").hasAnyRole("Cliente", "Operador", "Admin")
 
                         .anyExchange().authenticated()
                 )

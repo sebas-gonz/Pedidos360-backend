@@ -3,14 +3,14 @@ spring:
     name: ms-pedidos360-audit
 
   r2dbc:
-    url: r2dbc:postgresql://localhost:5432/ms-audit?scheme=audit
-    username: ${DB-USER:postgres}
-    password: ${DB-PASSWORD:root}
+    url: r2dbc:${DB_URL:postgresql://localhost:5432/ms-audit?scheme=audit}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:root}
 
   flyway:
-    url: jdbc:postgresql://localhost:5432/ms-audit
-    user: ${spring.r2dbc.username}
-    password: ${spring.r2dbc.password}
+    url: jdbc:${DB_URL:postgresql://localhost:5432/ms-audit}
+    password: ${DB_PASSWORD:root}
+    user: ${DB_USER:postgres}
     locations: classpath:db/migration
     baseline-on-migrate: true
     default-schema: audit

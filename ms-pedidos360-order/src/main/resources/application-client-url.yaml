@@ -7,4 +7,4 @@ app:
     report:
       url: ${REPORT_URL:http://localhost:8084}
     audit:
-      url: ${AUDIT_URL:h7ttp://localhost:8085}
+      url: ${AUDIT_URL:http://localhost:8085}

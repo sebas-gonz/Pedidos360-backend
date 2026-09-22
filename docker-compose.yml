@@ -1,0 +1,45 @@
+
+services:
+  bff:
+    image: sebagnz/ms-pedidos360-bff:latest
+    container_name: bff
+    ports:
+      - "8080:8080"
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
+      - CLIENTS_ORDERS_URL=http://order:8081
+      - CATALOG_URL=http://catalog:8082
+      - SPRING_PROFILES_ACTIVE=clients-url
+      - NOTIFY_URL=http://localhost:8083
+      - REPORT_URL=http://localhost:8084
+      - AUDIT_URL=http://localhost:8085
+      - CLIENTS_NOTIFY_URL=http://localhost:8083
+      - CLIENTS_REPORT_URL=http://localhost:8084
+      - CLIENTS_AUDIT_URL=http://localhost:8085
+    restart: always
+
+  order:
+    image: sebagnz/ms-pedidos360-order:latest
+    container_name: order
+    ports:
+      - "8081:8081"
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
+      - DB_URL=postgresql://${RDS_ENDPOINT}:5432/ms-orders?currentSchema=orders&sslMode=REQUIRE
+      - SPRING_PROFILES_ACTIVE=client-url
+      - DB_USER=${RDS_USER}
+      - DB_PASSWORD=${RDS_PASSWORD}
+      - CATALOG_URL=http://catalog:8082
+    restart: always
+
+  catalog:
+    image: sebagnz/ms-pedidos360-catalog:latest
+    container_name: catalog
+    ports:
+      - "8082:8082"
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
+      - DB_URL=postgresql://${RDS_ENDPOINT}:5432/ms-catalog?currentSchema=catalog&sslMode=REQUIRE
+      - DB_USER=${RDS_USER}
+      - DB_PASSWORD=${RDS_PASSWORD}
+    restart: always
