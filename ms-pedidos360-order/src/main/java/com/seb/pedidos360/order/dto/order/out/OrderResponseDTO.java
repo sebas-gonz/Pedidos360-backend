@@ -12,19 +12,6 @@ public record OrderResponseDTO(UUID orderUuid,
                                String priceCurrency,
                                Integer version,
                                List<OrderItemResponseDTO> orderItems
-) {
-    public record OrderItemResponseDTO(UUID orderItemUuid,
-                                       Integer quantity,
-                                       BigDecimal totalOrderItemAmount,
-                                       ProductItemResponseDTO product) {
-        public record ProductItemResponseDTO(UUID productUuid,
-                                             Integer version,
-                                             BigDecimal price,
-                                             String productName,
-                                             Set<String> imagesUrl) {
-        }
-
-    }
-
+){
 }
 

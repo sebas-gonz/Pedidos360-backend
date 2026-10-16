@@ -1,12 +1,13 @@
 package com.seb.pedidos360.order.services.implementations;
 
 import com.seb.pedidos360.order.dto.audit.AuditIngestDTO;
+import com.seb.pedidos360.order.dto.notify.NotifyDTO;
 import com.seb.pedidos360.order.dto.order.input.OrderCreatedRequestDTO;
+import com.seb.pedidos360.order.dto.order.out.OrderItemResponseDTO;
+import com.seb.pedidos360.order.dto.order.out.OrderResponseDTO;
+import com.seb.pedidos360.order.dto.order.out.ProductItemResponseDTO;
 import com.seb.pedidos360.order.dto.product.DeductStockRequestDTO;
 import com.seb.pedidos360.order.dto.product.ProductDTO;
-import com.seb.pedidos360.order.dto.order.input.UpdateOrderStatus;
-import com.seb.pedidos360.order.dto.notify.NotifyDTO;
-import com.seb.pedidos360.order.dto.order.out.OrderResponseDTO;
 import com.seb.pedidos360.order.dto.report.ReportIngestDTO;
 import com.seb.pedidos360.order.models.Order;
 import com.seb.pedidos360.order.models.OrderItem;
@@ -70,6 +71,7 @@ public class OrderServiceImpl implements OrderService {
                     Order order = Order
                             .builder()
                             .orderStatus(OrderStatus.CREATED.toString())
+                            .statusNumber(0)
                             .totalOrderAmount(totalOrdenAmount)
                             .priceCurrency(orderDTO.priceCurrency())
                             .customerId(customerId)
@@ -89,11 +91,11 @@ public class OrderServiceImpl implements OrderService {
                                 return orderItemRepository.saveAll(itemsToSave)
                                         .collectList()
                                         .flatMap(savedItems -> {
-                                            List<OrderResponseDTO.OrderItemResponseDTO> itemDTOs = tuples.stream()
-                                                    .map(tuple -> mapToOrderItemResponseDTO(tuple.getT1(), tuple.getT2()))
+                                            List<OrderItemResponseDTO> itemDTOs = tuples.stream()
+                                                    .map(tuple -> itemOrderToDTO(tuple.getT1(), tuple.getT2()))
                                                     .toList();
-                                            NotifyDTO notifyDTO = new NotifyDTO(customerEmail, customerName, order.getTotalOrderAmount(), order.getPriceCurrency(), order.getOrderStatus(), savedOrder.getUuid());
 
+                                            NotifyDTO notifyDTO = new NotifyDTO(customerEmail, customerName, order.getTotalOrderAmount(), order.getPriceCurrency(), order.getOrderStatus(), savedOrder.getUuid());
                                             AuditIngestDTO auditDTO = new AuditIngestDTO(savedOrder.getUuid(), "OrderCreated", customerEmail, "Customer", "Pedido creado con éxito");
 
                                             List<ReportIngestDTO.ProductQuantityDTO> reportItems = tuples.stream()
@@ -104,9 +106,8 @@ public class OrderServiceImpl implements OrderService {
                                                     notifyClient.sentOrderCreatedNotification(notifyDTO).onErrorResume(e -> Mono.empty()),
                                                     auditClient.ingestAudit(auditDTO).onErrorResume(e -> Mono.empty()),
                                                     reportClient.ingestReport(reportDTO).onErrorResume(e -> Mono.empty())
-                                            ).thenReturn(mapToOrderResponseDTO(savedOrder, itemDTOs));
+                                            ).thenReturn(orderToDTO(savedOrder, itemDTOs));
                                         });
-
                             });
                 });
     }
@@ -117,11 +118,11 @@ public class OrderServiceImpl implements OrderService {
         return orderRepository.findByUuid(orderUuid)
                 .switchIfEmpty(Mono.error(new NoSuchElementException("Order with UUID " + orderUuid + " not found")))
                 .flatMap(orderFound -> orderItemRepository.findByOrderId(orderFound.getId())
-                        .flatMap(orderItem -> catalogClient.getProductByUuid(orderItem.getProductUuid())
-                                .map(productDTO -> mapToOrderItemResponseDTO(orderItem, productDTO))
-                        )
+                        .flatMap(orderItem ->
+                                catalogClient.getProductByUuid(orderItem.getProductUuid())
+                                        .map(productDTO -> itemOrderToDTO(orderItem, productDTO)))
                         .collectList()
-                        .map(orderItems -> mapToOrderResponseDTO(orderFound, orderItems))
+                        .map(orderItemResponseDTOS -> orderToDTO(orderFound, orderItemResponseDTOS))
                 );
     }
 
@@ -131,10 +132,10 @@ public class OrderServiceImpl implements OrderService {
         return orderRepository.findByCustomerId(userId)
                 .flatMap(orderFound -> orderItemRepository.findByOrderId(orderFound.getId())
                         .flatMap(orderItem -> catalogClient.getProductByUuid(orderItem.getProductUuid())
-                                .map(productDTO -> mapToOrderItemResponseDTO(orderItem, productDTO))
+                                .map(productDTO -> itemOrderToDTO(orderItem, productDTO))
                         )
                         .collectList()
-                        .map(orderItems -> mapToOrderResponseDTO(orderFound, orderItems))
+                        .map(orderItems -> orderToDTO(orderFound, orderItems))
                 );
     }
 
@@ -144,10 +145,10 @@ public class OrderServiceImpl implements OrderService {
         return orderRepository.findAll()
                 .flatMap(orderFound -> orderItemRepository.findByOrderId(orderFound.getId())
                         .flatMap(orderItem -> catalogClient.getProductByUuid(orderItem.getProductUuid())
-                                .map(productDTO -> mapToOrderItemResponseDTO(orderItem, productDTO))
+                                .map(productDTO -> itemOrderToDTO(orderItem, productDTO))
                         )
                         .collectList()
-                        .map(orderItems -> mapToOrderResponseDTO(orderFound, orderItems))
+                        .map(orderItems -> orderToDTO(orderFound, orderItems))
                 );
     }
 
@@ -156,37 +157,31 @@ public class OrderServiceImpl implements OrderService {
         return orderRepository.findByOrderStatus(status)
                 .flatMap(orderFound -> orderItemRepository.findByOrderId(orderFound.getId())
                         .flatMap(orderItem -> catalogClient.getProductByUuid(orderItem.getProductUuid())
-                                .map(productDTO -> mapToOrderItemResponseDTO(orderItem, productDTO))
+                                .map(productDTO -> itemOrderToDTO(orderItem, productDTO))
                         )
                         .collectList()
-                        .map(orderItems -> mapToOrderResponseDTO(orderFound, orderItems))
+                        .map(orderItems -> orderToDTO(orderFound, orderItems))
                 );
     }
 
     @Override
     @Transactional()
     public Mono<OrderResponseDTO> updateOrderStatus(UUID orderUuid,
-                                                    UpdateOrderStatus updateOrderStatusDTO,
                                                     String customerId,
                                                     String customerEmail,
                                                     String customerName) {
         return orderRepository.findByUuid(orderUuid)
                 .switchIfEmpty(Mono.error(new NoSuchElementException("Order with UUID " + orderUuid + " not found")))
                 .flatMap(orderFound -> {
-                    String newStatus = updateOrderStatusDTO.orderStatus();
-                    String oldStatus = orderFound.getOrderStatus();
-                    if (newStatus.equals(OrderStatus.DISPATCHED.toString()) && oldStatus.equals(OrderStatus.CREATED.toString())) {
-                        return Mono.error(new IllegalArgumentException("Regla de negocio: Un pedido no puede pasar a DESPACHADO si previamente no fue ACEPTADO."));
+                    if (orderFound.getStatusNumber().compareTo(-1) < 0) {
+                        return Mono.error(new IllegalArgumentException("Order with UUID " + orderUuid + " is already canceled"));
                     }
-
-                    orderFound.setOrderStatus(newStatus);
+                    Order updatedOrder = updateOrderStatus(orderFound);
 
                     Mono<Void> stockDeductionMono = Mono.empty();
-                    if (newStatus.equals(OrderStatus.ACCEPTED.toString()) && !oldStatus.equals(OrderStatus.ACCEPTED.toString())) {
+                    if (updatedOrder.getOrderStatus().equals(OrderStatus.ACCEPTED.toString())) {
                         stockDeductionMono = orderItemRepository.findByOrderId(orderFound.getId())
-                                .map(orderItem -> {
-                                    return new DeductStockRequestDTO(orderItem.getProductUuid(), orderItem.getQuantity());
-                                })
+                                .map(orderItem -> new DeductStockRequestDTO(orderItem.getProductUuid(), orderItem.getQuantity()))
                                 .collectList()
                                 .flatMap(catalogClient::deductStock);
                     }
@@ -219,10 +214,28 @@ public class OrderServiceImpl implements OrderService {
                             )
                             .then(orderItemRepository.findByOrderId(orderUpdated.getId())
                                     .flatMap(orderItem -> catalogClient.getProductByUuid(orderItem.getProductUuid())
-                                            .map(productDTO -> mapToOrderItemResponseDTO(orderItem, productDTO)))
+                                            .map(productDTO -> itemOrderToDTO(orderItem, productDTO)))
                                     .collectList()
                             )
-                            .map(orderItems -> mapToOrderResponseDTO(orderUpdated, orderItems)); });
+                            .map(orderItems -> orderToDTO(orderUpdated, orderItems));
+                });
+    }
+
+    @Override
+    public Mono<OrderResponseDTO> CancelOrder(UUID orderUuid) {
+        return orderRepository.findByUuid(orderUuid)
+                .flatMap(orderFound -> {
+                    Order canceledOrder = cancelOrder(orderFound);
+                    return orderRepository.save(canceledOrder)
+                            .flatMap(orderCanceled -> orderItemRepository.findByOrderId(orderCanceled.getId())
+                                    .flatMap(orderItem -> catalogClient
+                                            .getProductByUuid(orderItem.getProductUuid())
+                                            .map(productDTO -> itemOrderToDTO(orderItem, productDTO))
+                                    )
+                                    .collectList()
+                                    .map(orderItems -> orderToDTO(orderCanceled, orderItems))
+                            );
+                });
     }
 
     @Override
@@ -235,10 +248,10 @@ public class OrderServiceImpl implements OrderService {
                     return orderItemRepository.findByOrderId(orders.getId())
                             .flatMap(orderItem -> {
                                 return catalogClient.getProductByUuid(orderItem.getProductUuid())
-                                        .map(productDTO -> mapToOrderItemResponseDTO(orderItem, productDTO));
+                                        .map(productDTO -> itemOrderToDTO(orderItem, productDTO));
                             })
                             .collectList()
-                            .map(orderItems -> mapToOrderResponseDTO(orders, orderItems));
+                            .map(orderItems -> orderToDTO(orders, orderItems));
                 });
     }
 
@@ -253,15 +266,14 @@ public class OrderServiceImpl implements OrderService {
                     return orderItemRepository.findByOrderId(orders.getId())
                             .flatMap(orderItem -> {
                                 return catalogClient.getProductByUuid(orderItem.getProductUuid())
-                                        .map(productDTO -> mapToOrderItemResponseDTO(orderItem, productDTO));
+                                        .map(productDTO -> itemOrderToDTO(orderItem, productDTO));
                             })
                             .collectList()
-                            .map(orderItems -> mapToOrderResponseDTO(orders, orderItems));
+                            .map(orderItems -> orderToDTO(orders, orderItems));
                 });
     }
 
-    private OrderResponseDTO mapToOrderResponseDTO(Order order,
-                                                   List<OrderResponseDTO.OrderItemResponseDTO> orderItems) {
+    private OrderResponseDTO orderToDTO(Order order, List<OrderItemResponseDTO> orderItems) {
         return new OrderResponseDTO(
                 order.getUuid(),
                 order.getCustomerId(),
@@ -273,24 +285,53 @@ public class OrderServiceImpl implements OrderService {
         );
     }
 
-    private OrderResponseDTO.OrderItemResponseDTO mapToOrderItemResponseDTO(OrderItem orderItem,
-                                                                            ProductDTO productDTO) {
-        return new OrderResponseDTO.OrderItemResponseDTO(
+    private OrderItemResponseDTO itemOrderToDTO(OrderItem orderItem, ProductDTO productDTO) {
+        return new OrderItemResponseDTO(
                 orderItem.getUuid(),
                 orderItem.getQuantity(),
                 orderItem.getTotalItemAmount(),
-                mapToProductItemResponseDTO(productDTO)
+                productDTOtoProductItemResponseDTO(productDTO)
         );
     }
 
-    private OrderResponseDTO.OrderItemResponseDTO.ProductItemResponseDTO mapToProductItemResponseDTO(ProductDTO productDTO) {
-        return new OrderResponseDTO.OrderItemResponseDTO.ProductItemResponseDTO(
+    private ProductItemResponseDTO productDTOtoProductItemResponseDTO(ProductDTO productDTO) {
+        return new ProductItemResponseDTO(
                 productDTO.productUuid(),
                 productDTO.version(),
                 productDTO.price(),
                 productDTO.productName(),
                 productDTO.images()
         );
+    }
+
+    private Order updateOrderStatus(Order order) {
+        Integer numberOfStatus = order.getStatusNumber();
+        switch (numberOfStatus) {
+            case 0:
+                order.setOrderStatus(OrderStatus.ACCEPTED.toString());
+                order.setStatusNumber(numberOfStatus + 1);
+                return order;
+            case 1:
+                order.setOrderStatus(OrderStatus.PREPARING.toString());
+                order.setStatusNumber(numberOfStatus + 1);
+                return order;
+            case 2:
+                order.setOrderStatus(OrderStatus.DISPATCHED.toString());
+                order.setStatusNumber(numberOfStatus + 1);
+                return order;
+            case 3:
+                order.setOrderStatus(OrderStatus.DELIVERED.toString());
+                order.setStatusNumber(numberOfStatus + 1);
+                return order;
+            default:
+                return order;
+        }
+    }
+
+    private Order cancelOrder(Order order) {
+        order.setOrderStatus(OrderStatus.CANCELED.toString());
+        order.setStatusNumber(-1);
+        return order;
     }
 }
 

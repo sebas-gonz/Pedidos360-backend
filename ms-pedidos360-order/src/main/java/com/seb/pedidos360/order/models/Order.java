@@ -1,9 +1,6 @@
 package com.seb.pedidos360.order.models;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import lombok.experimental.SuperBuilder;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
@@ -31,5 +28,9 @@ public class Order extends BaseEntity{
 
     @Column("order_status")
     private String orderStatus;
+
+    @Column("status_n")
+    @Builder.Default
+    private Integer statusNumber = 0;
 
 }

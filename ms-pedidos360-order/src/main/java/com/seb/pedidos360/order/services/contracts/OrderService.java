@@ -16,7 +16,9 @@ public interface OrderService {
     Flux<OrderResponseDTO> findOrdersByUserId(String userId);
     Flux<OrderResponseDTO> getAllOrders();
     Flux<OrderResponseDTO> getOrdersByStatus(String status);
-    Mono<OrderResponseDTO> updateOrderStatus(UUID orderUuid, UpdateOrderStatus updateOrderStatusDTO, String customerId, String customerEmail, String customerName);
+    Mono<OrderResponseDTO> updateOrderStatus(UUID orderUuid, String customerId, String customerEmail, String customerName);
+
+    Mono<OrderResponseDTO> CancelOrder(UUID orderUuid);
     Flux<OrderResponseDTO> getOrdersByStatusAndBetweenDates(String status, Instant fromDate, Instant toDate);
 
     Flux<OrderResponseDTO> getOrdersByStatusBetweenDatesAndUserid(String status, String userid, Instant fromDate, Instant toDate);
