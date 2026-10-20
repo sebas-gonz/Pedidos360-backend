@@ -11,13 +11,17 @@ spring:
     url: jdbc:${DB_URL:postgresql://localhost:5432/ms-orders}
     password: ${DB_PASSWORD:root}
     user: ${DB_USER:postgres}
-    locations: classpath:db/migration
     baseline-on-migrate: true
     default-schema: orders
 
   output:
     ansi:
       enabled: always
+
+  activemq:
+    broker-url: tcp:${ACTIVEMQ_BROKER_URL://localhost:61616}
+    user: admin
+    password: admin
 
 server:
   port: 8081

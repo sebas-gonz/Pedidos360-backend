@@ -11,6 +11,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 @Service
@@ -25,19 +26,22 @@ public class AuditServcieImpl {
                 .userEmail(dto.userEmail())
                 .userRole(dto.userRole())
                 .details(dto.details())
-                .eventDate(Instant.now())
                 .build();
 
         return auditRepository.save(event).then();
     }
-    public Flux<AuditResponseDTO> getTimeline(Instant from, Instant to, String userEmail, String eventType) {
-        return auditRepository.findByEventDateBetween(from, to)
+
+    public Flux<AuditResponseDTO> getTimeline(Instant from, Instant to, String userEmail) {
+        Instant fromDate = from != null ? from : Instant.now().minus(30, ChronoUnit.DAYS);
+        Instant toDate = to != null ? to : Instant.now();
+
+        return auditRepository.findByCreatedAtBetween(fromDate, toDate)
                 .filter(event -> userEmail == null || userEmail.isBlank() || event.getUserEmail().equalsIgnoreCase(userEmail))
-                .filter(event -> eventType == null || eventType.isBlank() || event.getEventType().equalsIgnoreCase(eventType))
                 .map(this::mapToDTO);
     }
+
     public Flux<AuditResponseDTO> getOrderTimeline(UUID orderUuid) {
-        return auditRepository.findByOrderUuidOrderByEventDateDesc(orderUuid)
+        return auditRepository.findByOrderUuidOrderByCreatedAtDesc(orderUuid)
                 .map(this::mapToDTO);
     }
 
@@ -47,7 +51,7 @@ public class AuditServcieImpl {
                 event.getEventType(),
                 event.getUserEmail(),
                 event.getUserRole(),
-                event.getEventDate(),
+                event.getCreatedAt(),
                 event.getDetails()
         );
     }

@@ -1,0 +1,2 @@
+ALTER TABLE "orders"
+ADD COLUMN status_number INTEGER DEFAULT 0;

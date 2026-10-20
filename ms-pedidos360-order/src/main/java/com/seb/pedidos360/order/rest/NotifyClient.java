@@ -1,6 +1,6 @@
 package com.seb.pedidos360.order.rest;
 
-import com.seb.pedidos360.order.dto.notify.NotifyDTO;
+import com.seb.pedidos360.order.dto.notify.NotifyUserDTO;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -16,7 +16,7 @@ public class NotifyClient {
         this.webClient = webClient.baseUrl(notifyUrl).build();
     }
 
-    public Mono<Void> sentOrderCreatedNotification(NotifyDTO notify) {
+    public Mono<Void> sentOrderCreatedNotification(NotifyUserDTO notify) {
         return webClient.post()
                 .uri("/api/notify/created")
                 .bodyValue(notify)
@@ -25,7 +25,7 @@ public class NotifyClient {
                 .bodyToMono(Void.class);
     }
 
-    public Mono<Void> setUpdatedOrderNotification(NotifyDTO notify) {
+    public Mono<Void> setUpdatedOrderNotification(NotifyUserDTO notify) {
         return webClient.post()
                 .uri("/api/notify/updated")
                 .bodyValue(notify)

@@ -26,16 +26,16 @@ public class WebClientConfig {
                 .cast(JwtAuthenticationToken.class)
                 .map(JwtAuthenticationToken::getToken)
                 .flatMap(jwt -> {
-                    String name = jwt.hasClaim("name")
-                            ? jwt.getClaimAsString("name")
+                    String name = jwt.hasClaim("name") ? jwt.getClaimAsString("name")
                             : (jwt.getClaimAsString("given_name") + " " + jwt.getClaimAsString("family_name")).trim();
 
-                    String email = jwt.hasClaim("preferred_username")
-                            ? jwt.getClaimAsString("preferred_username")
+                    String email = jwt.hasClaim("preferred_username") ? jwt.getClaimAsString("preferred_username")
                             : (jwt.hasClaim("email") ? jwt.getClaimAsString("email") : "sin-correo");
-                    String objectId = jwt.hasClaim("oid") ? jwt.getClaimAsString("oid") : jwt.getSubject();
-                    String roles = jwt.hasClaim("roles")
-                            ? String.join(",", jwt.getClaimAsStringList("roles"))
+
+                    String objectId = jwt.hasClaim("oid") ? jwt.getClaimAsString("oid")
+                            : jwt.getSubject();
+
+                    String roles = jwt.hasClaim("roles") ? String.join(",", jwt.getClaimAsStringList("roles"))
                             : "Cliente";
 
                     ClientRequest newRequest = ClientRequest.from(request)

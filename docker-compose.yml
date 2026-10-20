@@ -1,4 +1,3 @@
-
 services:
   bff:
     image: sebagnz/ms-pedidos360-bff:latest

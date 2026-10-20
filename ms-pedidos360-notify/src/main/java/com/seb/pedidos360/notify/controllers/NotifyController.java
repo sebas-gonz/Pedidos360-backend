@@ -1,6 +1,8 @@
 package com.seb.pedidos360.notify.controllers;
 
 import com.seb.pedidos360.notify.dto.NotifyDTO;
+import com.seb.pedidos360.notify.dto.NotifyKitchenTicketDTO;
+import com.seb.pedidos360.notify.dto.NotifyUserDTO;
 import com.seb.pedidos360.notify.services.contracts.NotifyService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -15,20 +17,16 @@ import reactor.core.publisher.Mono;
 public class NotifyController {
     private final NotifyService notifyService;
     
-    @PostMapping("/created")
-    public Mono<Void> notifyOrderCreated(@RequestBody Mono<NotifyDTO> notifyDTOMono) {
-        return notifyDTOMono.flatMap(notifyService::notifyUser);
+    @GetMapping(value = "/kitchen/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<NotifyKitchenTicketDTO>> streamNotifyTickets(){
+        return notifyService.getTicketsNotifications()
+                .map(ticket -> ServerSentEvent.builder(ticket).build());
     }
 
-    @PostMapping("/updated")
-    public Mono<Void> notifyOrderUpdated(@RequestBody Mono<NotifyDTO> notifyDTOMono) {
-        return notifyDTOMono.flatMap(notifyService::notifyUser);
-    }
-
-    @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<ServerSentEvent<NotifyDTO>> streamNotifications() {
-        return notifyService.getNotificationsStream()
-                .map(dto -> ServerSentEvent.builder(dto).build());
+    @GetMapping(value = "/notification/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<NotifyUserDTO>> streamUserNotification(){
+        return notifyService.getUserNotifications()
+                .map(notification -> ServerSentEvent.builder(notification).build());
     }
 
 }

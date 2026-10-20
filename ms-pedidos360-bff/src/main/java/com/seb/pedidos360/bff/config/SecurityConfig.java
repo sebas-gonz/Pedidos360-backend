@@ -35,7 +35,7 @@ public class SecurityConfig {
 
                         // Reportes y Auditoría
                         .pathMatchers("/api/reports/**").hasRole("Admin")
-                        .pathMatchers("/api/audit/**").hasRole("Auditor")
+                        .pathMatchers("/api/audit/**").hasAnyRole("Admin", "Auditor")
 
                         .pathMatchers(HttpMethod.GET, "/api/orders").hasAnyRole("Admin", "Operador")
                         .pathMatchers(HttpMethod.GET, "/api/orders/status/**").hasAnyRole("Admin", "Operador")

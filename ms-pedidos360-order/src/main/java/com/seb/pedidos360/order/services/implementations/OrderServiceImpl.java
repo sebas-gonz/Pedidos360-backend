@@ -1,7 +1,11 @@
 package com.seb.pedidos360.order.services.implementations;
 
+import com.seb.pedidos360.order.configs.ActivemqConfig;
 import com.seb.pedidos360.order.dto.audit.AuditIngestDTO;
-import com.seb.pedidos360.order.dto.notify.NotifyDTO;
+import com.seb.pedidos360.order.dto.notify.NotifyInvoiceDTO;
+import com.seb.pedidos360.order.dto.notify.NotifyKitchenTicketDTO;
+import com.seb.pedidos360.order.dto.notify.NotifyUserDTO;
+import com.seb.pedidos360.order.dto.notify.OrderItemKitchenDTO;
 import com.seb.pedidos360.order.dto.order.input.OrderCreatedRequestDTO;
 import com.seb.pedidos360.order.dto.order.out.OrderItemResponseDTO;
 import com.seb.pedidos360.order.dto.order.out.OrderResponseDTO;
@@ -19,13 +23,16 @@ import com.seb.pedidos360.order.rest.CatalogClient;
 import com.seb.pedidos360.order.rest.NotifyClient;
 import com.seb.pedidos360.order.rest.ReportClient;
 import com.seb.pedidos360.order.services.contracts.OrderService;
+import jakarta.jms.Topic;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
+import org.springframework.jms.core.JmsTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuples;
+import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -43,10 +50,13 @@ public class OrderServiceImpl implements OrderService {
     private final NotifyClient notifyClient;
     private final ReportClient reportClient;
     private final AuditClient auditClient;
+    private final JmsTemplate ttlJmsTemplate;
+    private final ObjectMapper objectMapper;
+    private final Topic orderEventsTopic;
 
     @Override
     @Transactional
-    public Mono<OrderResponseDTO> createOrder(OrderCreatedRequestDTO orderDTO, String customerId, String customerEmail, String customerName) {
+    public Mono<OrderResponseDTO> createOrder(OrderCreatedRequestDTO orderDTO, String customerId, String userEmail, String userName, String userRole) {
         return Flux.fromIterable(orderDTO.orderItems())
                 .flatMap(orderListRequestDTO -> catalogClient.getProductByUuid(orderListRequestDTO.productUuid())
                         .map(productDTO -> {
@@ -95,15 +105,42 @@ public class OrderServiceImpl implements OrderService {
                                                     .map(tuple -> itemOrderToDTO(tuple.getT1(), tuple.getT2()))
                                                     .toList();
 
-                                            NotifyDTO notifyDTO = new NotifyDTO(customerEmail, customerName, order.getTotalOrderAmount(), order.getPriceCurrency(), order.getOrderStatus(), savedOrder.getUuid());
-                                            AuditIngestDTO auditDTO = new AuditIngestDTO(savedOrder.getUuid(), "OrderCreated", customerEmail, "Customer", "Pedido creado con éxito");
+                                            List<OrderItemKitchenDTO> itemsTicket = tuples.stream()
+                                                    .map(tuple -> {
+                                                        OrderItem item = tuple.getT1();
+                                                        ProductDTO product = tuple.getT2();
+                                                        return new OrderItemKitchenDTO(product.productName(), item.getQuantity()
+                                                        );
+                                                    }).toList();
 
+                                            NotifyKitchenTicketDTO ticket = new NotifyKitchenTicketDTO(savedOrder.getUuid(), savedOrder.getOrderStatus(), itemsTicket);
+                                            NotifyUserDTO notifyUserDTO = new NotifyUserDTO(userEmail, userName, order.getOrderStatus(), order.getUuid());
+                                            NotifyInvoiceDTO notifyInvoiceDTO = new NotifyInvoiceDTO(savedOrder.getUuid(), customerId, userName, userEmail, totalOrdenAmount, savedOrder.getPriceCurrency());
+                                            AuditIngestDTO auditDTO = new AuditIngestDTO(order.getUuid(),
+                                                    "order." + savedOrder.getOrderStatus().toLowerCase(),
+                                                    userEmail,
+                                                    userRole,
+                                                    "Pedido " + savedOrder.getOrderStatus() + " por :" + userName);
+
+                                            try {
+                                                String ticketNotification = objectMapper.writeValueAsString(ticket);
+                                                String notification = objectMapper.writeValueAsString(notifyUserDTO);
+                                                String invoice = objectMapper.writeValueAsString(notifyInvoiceDTO);
+                                                String auditMessage = objectMapper.writeValueAsString(auditDTO);
+
+                                                ttlJmsTemplate.convertAndSend(ActivemqConfig.KITCHEN_QUEUE, ticketNotification);
+                                                ttlJmsTemplate.convertAndSend(ActivemqConfig.EMAIL_QUEUE, notification);
+                                                ttlJmsTemplate.convertAndSend(ActivemqConfig.INVOICE_QUEUE, invoice);
+                                                ttlJmsTemplate.convertAndSend(orderEventsTopic, auditMessage);
+                                            } catch (Exception e) {
+                                                return Mono.error(new RuntimeException(e));
+                                            }
                                             List<ReportIngestDTO.ProductQuantityDTO> reportItems = tuples.stream()
                                                     .map(t -> new ReportIngestDTO.ProductQuantityDTO(t.getT1().getProductUuid(), t.getT1().getQuantity())).toList();
                                             ReportIngestDTO reportDTO = new ReportIngestDTO(savedOrder.getUuid(), savedOrder.getOrderStatus(), savedOrder.getTotalOrderAmount(), Instant.now(), reportItems);
 
                                             return Mono.when(
-                                                    notifyClient.sentOrderCreatedNotification(notifyDTO).onErrorResume(e -> Mono.empty()),
+                                                    notifyClient.sentOrderCreatedNotification(notifyUserDTO).onErrorResume(e -> Mono.empty()),
                                                     auditClient.ingestAudit(auditDTO).onErrorResume(e -> Mono.empty()),
                                                     reportClient.ingestReport(reportDTO).onErrorResume(e -> Mono.empty())
                                             ).thenReturn(orderToDTO(savedOrder, itemDTOs));
@@ -168,8 +205,9 @@ public class OrderServiceImpl implements OrderService {
     @Transactional()
     public Mono<OrderResponseDTO> updateOrderStatus(UUID orderUuid,
                                                     String customerId,
-                                                    String customerEmail,
-                                                    String customerName) {
+                                                    String userEmail,
+                                                    String userName,
+                                                    String userRole) {
         return orderRepository.findByUuid(orderUuid)
                 .switchIfEmpty(Mono.error(new NoSuchElementException("Order with UUID " + orderUuid + " not found")))
                 .flatMap(orderFound -> {
@@ -181,35 +219,40 @@ public class OrderServiceImpl implements OrderService {
                     Mono<Void> stockDeductionMono = Mono.empty();
                     if (updatedOrder.getOrderStatus().equals(OrderStatus.ACCEPTED.toString())) {
                         stockDeductionMono = orderItemRepository.findByOrderId(orderFound.getId())
-                                .map(orderItem -> new DeductStockRequestDTO(orderItem.getProductUuid(), orderItem.getQuantity()))
+                                .map(itemOrder -> new DeductStockRequestDTO(itemOrder.getProductUuid(), itemOrder.getQuantity()))
                                 .collectList()
                                 .flatMap(catalogClient::deductStock);
                     }
-                    return stockDeductionMono.then(r2Template.update(orderFound));
+                    return stockDeductionMono.then(r2Template.update(updatedOrder));
                 })
                 .flatMap(orderUpdated -> {
 
-                    NotifyDTO notifyDTO = new NotifyDTO(customerEmail,
-                            customerName,
-                            orderUpdated.getTotalOrderAmount(),
-                            orderUpdated.getPriceCurrency(),
+                    NotifyUserDTO notifyUserDTO = new NotifyUserDTO(
+                            userEmail,
+                            userName,
                             orderUpdated.getOrderStatus(),
-                            orderUpdated.getUuid());
-
+                            orderUpdated.getUuid()
+                    );
                     AuditIngestDTO auditDTO = new AuditIngestDTO(orderUpdated.getUuid(),
-                            "Order" + orderUpdated.getOrderStatus(),
-                            customerEmail,
-                            "Operator",
-                            "Estado del pedido actualizado a " + orderUpdated.getOrderStatus());
+                            "order." + orderUpdated.getOrderStatus().toLowerCase(),
+                            userEmail,
+                            userRole,
+                            "Estado del pedido actualizado a " + orderUpdated.getOrderStatus() + " por :" + userName);
+                    try {
+                        String notification = objectMapper.writeValueAsString(notifyUserDTO);
+                        String auditMessage = objectMapper.writeValueAsString(auditDTO);
 
+                        ttlJmsTemplate.convertAndSend(orderEventsTopic, auditMessage);
+                        ttlJmsTemplate.convertAndSend(ActivemqConfig.EMAIL_QUEUE, notification);
+                    } catch (Exception e) {
+                        return Mono.error(new RuntimeException(e));
+                    }
                     ReportIngestDTO reportDTO = new ReportIngestDTO(orderUpdated.getUuid(),
                             orderUpdated.getOrderStatus(),
                             orderUpdated.getTotalOrderAmount(),
                             Instant.now(), List.of());
 
                     return Mono.when(
-                                    notifyClient.setUpdatedOrderNotification(notifyDTO).onErrorResume(e -> Mono.empty()),
-                                    auditClient.ingestAudit(auditDTO).onErrorResume(e -> Mono.empty()),
                                     reportClient.ingestReport(reportDTO).onErrorResume(e -> Mono.empty())
                             )
                             .then(orderItemRepository.findByOrderId(orderUpdated.getId())
@@ -222,18 +265,43 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    public Mono<OrderResponseDTO> CancelOrder(UUID orderUuid) {
+    public Mono<OrderResponseDTO> cancelOrder(UUID orderUuid, String userId, String userEmail, String userName,
+                                              String userRole) {
         return orderRepository.findByUuid(orderUuid)
                 .flatMap(orderFound -> {
                     Order canceledOrder = cancelOrder(orderFound);
                     return orderRepository.save(canceledOrder)
-                            .flatMap(orderCanceled -> orderItemRepository.findByOrderId(orderCanceled.getId())
-                                    .flatMap(orderItem -> catalogClient
-                                            .getProductByUuid(orderItem.getProductUuid())
-                                            .map(productDTO -> itemOrderToDTO(orderItem, productDTO))
-                                    )
-                                    .collectList()
-                                    .map(orderItems -> orderToDTO(orderCanceled, orderItems))
+                            .flatMap(orderCanceled -> {
+                                        NotifyUserDTO notifyUserDTO = new NotifyUserDTO(
+                                                userEmail,
+                                                userName,
+                                                canceledOrder.getOrderStatus(),
+                                                canceledOrder.getUuid()
+                                        );
+                                        AuditIngestDTO audit = new AuditIngestDTO(
+                                                orderFound.getUuid(),
+                                                "order.canceled",
+                                                userEmail,
+                                                userRole,
+                                                "Pedido cancelado por: " + userName
+                                        );
+                                        try {
+                                            String notification = objectMapper.writeValueAsString(notifyUserDTO);
+                                            String auditMessage = objectMapper.writeValueAsString(audit);
+
+                                            ttlJmsTemplate.convertAndSend(orderEventsTopic, auditMessage);
+                                            ttlJmsTemplate.convertAndSend(ActivemqConfig.EMAIL_QUEUE, notification);
+                                        } catch (Exception e) {
+                                            return Mono.error(new RuntimeException(e));
+                                        }
+                                        return orderItemRepository.findByOrderId(orderCanceled.getId())
+                                                .flatMap(orderItem -> catalogClient
+                                                        .getProductByUuid(orderItem.getProductUuid())
+                                                        .map(productDTO -> itemOrderToDTO(orderItem, productDTO))
+                                                )
+                                                .collectList()
+                                                .map(orderItems -> orderToDTO(orderCanceled, orderItems));
+                                    }
                             );
                 });
     }

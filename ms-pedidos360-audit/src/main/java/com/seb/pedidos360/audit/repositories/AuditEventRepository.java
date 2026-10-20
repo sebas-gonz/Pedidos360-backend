@@ -11,8 +11,8 @@ import java.util.UUID;
 
 @Repository
 public interface AuditEventRepository extends ReactiveCrudRepository<AuditEvent, Long> {
-    @Query("SELECT * FROM audit_events WHERE event_date >= :fromDate AND event_date <= :toDate ORDER BY event_date DESC")
-    Flux<AuditEvent> findByEventDateBetween(Instant fromDate, Instant toDate);
+    @Query("SELECT * FROM audit.audit_events WHERE created_at >= :fromDate AND created_at <= :toDate ORDER BY created_at DESC")
+    Flux<AuditEvent> findByCreatedAtBetween(Instant fromDate, Instant toDate);
 
-    Flux<AuditEvent> findByOrderUuidOrderByEventDateDesc(UUID orderUuid);
+    Flux<AuditEvent> findByOrderUuidOrderByCreatedAtDesc(UUID orderUuid);
 }

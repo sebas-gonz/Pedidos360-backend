@@ -1,10 +1,8 @@
 package com.seb.pedidos360.order.controllers;
 
 import com.seb.pedidos360.order.dto.order.input.OrderCreatedRequestDTO;
-import com.seb.pedidos360.order.dto.order.input.UpdateOrderStatus;
 import com.seb.pedidos360.order.dto.order.out.OrderResponseDTO;
 import com.seb.pedidos360.order.models.OrderItem;
-import com.seb.pedidos360.order.models.OrderStatus;
 import com.seb.pedidos360.order.services.contracts.OrderItemService;
 import com.seb.pedidos360.order.services.contracts.OrderService;
 import jakarta.validation.Valid;
@@ -34,8 +32,9 @@ public class OrderController {
                                                               @RequestHeader("X-Customer-Id") String customerId,
                                                               @RequestHeader("X-Customer-Email") String customerEmail,
                                                               @RequestHeader("X-Customer-Name") String customerName,
+                                                              @RequestHeader("X-User-Roles") String userRole,
                                                               ServerWebExchange exchange) {
-        return orderRequest.flatMap(order -> orderService.createOrder(order, customerId, customerEmail, customerName))
+        return orderRequest.flatMap(order -> orderService.createOrder(order, customerId, customerEmail, customerName, userRole))
                 .map(savedOrder -> {
                     URI location = UriComponentsBuilder.fromUri(exchange.getRequest().getURI())
                             .path("/{orderId}")
@@ -46,8 +45,9 @@ public class OrderController {
                             .body(savedOrder);
                 });
     }
+
     @GetMapping
-    public Flux<OrderResponseDTO> getOrders(){
+    public Flux<OrderResponseDTO> getOrders() {
         return orderService.getAllOrders();
     }
 
@@ -68,14 +68,22 @@ public class OrderController {
 
     @PutMapping("/{uuid}/status")
     public Mono<ResponseEntity<OrderResponseDTO>> updateOrderStatus(@PathVariable("uuid") UUID uuid,
-                                                                    @RequestBody Mono<UpdateOrderStatus> newOrderStatus,
                                                                     @RequestHeader("X-Customer-Id") String customerId,
                                                                     @RequestHeader("X-Customer-Email") String customerEmail,
-                                                                    @RequestHeader("X-Customer-Name") String customerName) {
-        return newOrderStatus.flatMap(status -> orderService.updateOrderStatus(uuid, status, customerId, customerEmail, customerName))
-                .map(updatedOrder -> ResponseEntity.ok()
-                        .eTag(updatedOrder.version().toString())
-                        .body(updatedOrder));
+                                                                    @RequestHeader("X-Customer-Name") String customerName,
+                                                                    @RequestHeader("X-User-Roles") String userRole) {
+        return orderService.updateOrderStatus(uuid,customerId, customerEmail, customerName, userRole)
+                .map(updatedOrder -> ResponseEntity.ok().body(updatedOrder));
+    }
+
+    @PutMapping("/{uuid}/cancel")
+    public Mono<ResponseEntity<OrderResponseDTO>> cancelOrder(@PathVariable("uuid") UUID uuid,
+                                                              @RequestHeader("X-Customer-Id") String customerId,
+                                                              @RequestHeader("X-Customer-Email") String customerEmail,
+                                                              @RequestHeader("X-Customer-Name") String customerName,
+                                                              @RequestHeader("X-User-Roles") String userRole){
+        return orderService.cancelOrder(uuid, customerId, customerEmail, customerName, userRole)
+                .map(canceledOrder -> ResponseEntity.ok().body(canceledOrder));
     }
 
     @GetMapping("/table")
@@ -106,7 +114,7 @@ public class OrderController {
     }
 
     @GetMapping("/status/{status}")
-    public Flux<OrderResponseDTO> findOrdersByStatus(@PathVariable String status,ServerWebExchange exchange) {
+    public Flux<OrderResponseDTO> findOrdersByStatus(@PathVariable String status, ServerWebExchange exchange) {
         return orderService.getOrdersByStatus(status);
     }
 }

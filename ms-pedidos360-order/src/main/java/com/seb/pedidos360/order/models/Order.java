@@ -29,7 +29,7 @@ public class Order extends BaseEntity{
     @Column("order_status")
     private String orderStatus;
 
-    @Column("status_n")
+    @Column("status_number")
     @Builder.Default
     private Integer statusNumber = 0;
 
