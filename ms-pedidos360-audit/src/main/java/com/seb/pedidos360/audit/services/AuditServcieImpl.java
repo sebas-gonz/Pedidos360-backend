@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -18,6 +19,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AuditServcieImpl {
     private final AuditEventRepository auditRepository;
+    private final Sinks.Many<AuditResponseDTO> auditStream = Sinks.many().multicast().onBackpressureBuffer();
 
     public Mono<Void> ingestEvent(AuditIngestDTO dto) {
         AuditEvent event = AuditEvent.builder()
@@ -28,21 +30,28 @@ public class AuditServcieImpl {
                 .details(dto.details())
                 .build();
 
-        return auditRepository.save(event).then();
+        return auditRepository.save(event)
+                .doOnSuccess(savedEvent -> {
+                    AuditResponseDTO audit = this.mapToDTO(savedEvent);
+                    auditStream.tryEmitNext(audit);
+                }).then();
     }
 
-    public Flux<AuditResponseDTO> getTimeline(Instant from, Instant to, String userEmail) {
+    public Flux<AuditResponseDTO> getTimeline(Instant from, Instant to) {
         Instant fromDate = from != null ? from : Instant.now().minus(30, ChronoUnit.DAYS);
         Instant toDate = to != null ? to : Instant.now();
 
         return auditRepository.findByCreatedAtBetween(fromDate, toDate)
-                .filter(event -> userEmail == null || userEmail.isBlank() || event.getUserEmail().equalsIgnoreCase(userEmail))
                 .map(this::mapToDTO);
     }
 
     public Flux<AuditResponseDTO> getOrderTimeline(UUID orderUuid) {
         return auditRepository.findByOrderUuidOrderByCreatedAtDesc(orderUuid)
                 .map(this::mapToDTO);
+    }
+
+    public Flux<AuditResponseDTO> getAuditStream(){
+        return auditStream.asFlux();
     }
 
     private AuditResponseDTO mapToDTO(AuditEvent event) {

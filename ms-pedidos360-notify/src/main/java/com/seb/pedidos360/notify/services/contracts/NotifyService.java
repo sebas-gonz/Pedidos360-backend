@@ -16,5 +16,4 @@ public interface NotifyService {
 
     Flux<NotifyUserDTO> getUserNotifications();
     Flux<NotifyKitchenTicketDTO> getTicketsNotifications();
-
 }

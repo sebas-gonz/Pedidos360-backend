@@ -3,12 +3,13 @@ spring:
     name: ms-pedidos360-order
 
   r2dbc:
-    url: r2dbc:${DB_URL:postgresql://localhost:5432/ms-orders?scheme=orders}
+    # Usamos ?schema= en lugar de ?currentSchema= para R2DBC
+    url: r2dbc:${DB_URL:postgresql://localhost:5432/ms-orders}?schema=orders
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:root}
 
   flyway:
-    url: jdbc:${DB_URL:postgresql://localhost:5432/ms-orders}
+    url: jdbc:${DB_URL:postgresql://localhost:5432/ms-orders}?currentSchema=orders
     password: ${DB_PASSWORD:root}
     user: ${DB_USER:postgres}
     baseline-on-migrate: true
@@ -19,7 +20,7 @@ spring:
       enabled: always
 
   activemq:
-    broker-url: tcp:${ACTIVEMQ_BROKER_URL://localhost:61616}
+    broker-url: ${ACTIVEMQ_BROKER_URL:failover:(tcp://localhost:61616,tcp://localhost:61617)?randomize=false}
     user: admin
     password: admin
 
@@ -31,4 +32,12 @@ logging:
     org:
       springframework:
         r2dbc: DEBUG
+
+broker:
+  queues:
+    email: "q.cmd.email"
+    kitchen: "q.cmd.kitchen"
+    invoice: "q.cmd.invoice"
+  topics:
+    orders: "VirtualTopic.Orders"
 

@@ -6,6 +6,7 @@ import com.seb.pedidos360.notify.dto.NotifyUserDTO;
 import com.seb.pedidos360.notify.services.contracts.NotifyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jms.annotation.JmsListener;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.stereotype.Service;
@@ -20,7 +21,10 @@ public class NotifyMessageListener {
     private final NotifyService notifyService;
     private final JmsTemplate jmsTemplate;
 
-    @JmsListener(destination = "q.cmd.email")
+    @Value("${broker.queue.kitchen-dlq}")
+    private  String kitchenDLQ;
+
+    @JmsListener(destination = "${broker.queue.email}")
     public void processEmailQueue(String messageJson) {
         try {
             NotifyUserDTO userNotification = objectMapper.readValue(messageJson, NotifyUserDTO.class);
@@ -31,7 +35,7 @@ public class NotifyMessageListener {
         }
     }
 
-    @JmsListener(destination = "q.cmd.invoice")
+    @JmsListener(destination = "${broker.queue.invoice}")
     public void processInvoiceQueue(String messageJson) {
         try {
             NotifyInvoiceDTO invoice = objectMapper.readValue(messageJson, NotifyInvoiceDTO.class);
@@ -41,41 +45,35 @@ public class NotifyMessageListener {
         }
     }
 
-    @JmsListener(destination = "q.cmd.kitchen")
-    public void processKitchenTicketQueue(String messageJson) {
+    @JmsListener(destination = "${broker.queue.kitchen}")
+    public void processKitchenQueue(String messageJson) {
+        NotifyKitchenTicketDTO ticketDto = null;
         try {
-            NotifyKitchenTicketDTO ticket = objectMapper.readValue(messageJson, NotifyKitchenTicketDTO.class);
-            notifyService.notifyKitchenTicket(ticket).subscribe();
+            ticketDto = objectMapper.readValue(messageJson, NotifyKitchenTicketDTO.class);
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            log.error("Error parseando JSON de cocina: {}", e.getMessage());
+            return;
         }
-    }
+        notifyService.notifyKitchenTicket(ticketDto).subscribe();
 
-    @JmsListener(destination = "q.cmd.kitchen")
-    public void printKitchenTicket(String messageJson) {
-        int maxRetries = 2;
+        int intentos = 2;
         boolean success = false;
-
-        for (int intento = 0; intento <= maxRetries; intento++) {
+        for (int intento = 0; intento <= intentos; intento++) {
             try {
-                NotifyKitchenTicketDTO dto = objectMapper.readValue(messageJson, NotifyKitchenTicketDTO.class);
-                notifyService.printKitchenTicket(dto).block();
+                notifyService.printKitchenTicket(ticketDto).block();
                 success = true;
                 break;
             } catch (Exception e) {
-                log.warn("Error en el intento {}: {}", intento, e.getMessage());
-                if (intento < maxRetries) {
-                    try {
-                        Thread.sleep(2000);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                    }
+                log.warn("Fallo de impresión, intento {}: {}", intento, e.getMessage());
+                if (intento < intentos) {
+                    try { Thread.sleep(2000); } catch (InterruptedException ie) {}
                 }
             }
         }
+
         if (!success) {
-            log.error("Moviendo mensaje al a kitchen.dlq");
-            jmsTemplate.convertAndSend("q.cmd.kitchen.dlq", messageJson);
+            log.error("Moviendo mensaje a la DLQ.");
+            jmsTemplate.convertAndSend(kitchenDLQ, messageJson);
         }
     }
 }

@@ -139,13 +139,8 @@ public class NotifyServiceImpl implements NotifyService {
     @Override
     public Mono<Void> printKitchenTicket(NotifyKitchenTicketDTO ticketDTO) {
         return Mono.fromRunnable(() -> {
-            boolean forzarFallo = true;
-            if (forzarFallo) {
-                log.error("Error al imprimir el ticket");
-                throw new RuntimeException("Fallo: cocina");
-            }
-            log.info("Ticket impreso físicamente");
-            ticketsNotification.tryEmitNext(ticketDTO);
+            log.error("Error al intentar conectar con la impresora térmica");
+            throw new RuntimeException("Fallo controlado: la impresora no tiene papel");
         }).then();
     }
 

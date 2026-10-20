@@ -1,9 +1,13 @@
 package com.seb.pedidos360.bff.controllers;
 
+import com.seb.pedidos360.bff.dto.queue.QueueRequestDTO;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -46,10 +50,11 @@ public class AuditBffController {
                 .bodyToFlux(Object.class);
     }
 
-    @PostMapping("/queues/{queuename}")
-    public Mono<ResponseEntity<Map<String, Object>>> createQueue(@PathVariable String queuename){
+    @PostMapping("/queues")
+    public Mono<ResponseEntity<Map<String, Object>>> createQueue(@Valid @RequestBody QueueRequestDTO request){
         return webClient.post()
-                .uri(auditUrl + "/api/audits/queues/" + queuename)
+                .uri(auditUrl + "/api/audits/queues")
+                .bodyValue(request)
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>(){})
                 .map(queueName -> ResponseEntity.ok().body(queueName))
@@ -76,5 +81,15 @@ public class AuditBffController {
                 .map(ResponseEntity::ok)
                 .doOnError(e -> System.out.println(e.getMessage()))
                 .onErrorReturn(ResponseEntity.internalServerError().body(Map.of("Error", "Error al obtener las colas")));
+    }
+
+    @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<Object>> streamAudits() {
+        return webClient.get()
+                .uri(auditUrl + "/api/audits/stream")
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .retrieve()
+                .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<Object>>() {})
+                .doOnError(e -> System.err.println("Error en bff audit stream proxy: " + e.getMessage()));
     }
 }

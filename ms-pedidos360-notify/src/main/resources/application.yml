@@ -13,8 +13,16 @@ spring:
           ssl:
             enable: true
   activemq:
-    broker-url: tcp:${ACTIVEMQ_BROKER_URL://localhost:61616}
+    broker-url: tcp://${ACTIVEMQ_BROKER_URL:localhost:61617}
     user: admin
     password: admin
+
 server:
   port: 8083
+
+broker:
+  queue:
+    email: "q.cmd.email"
+    invoice: "q.cmd.invoice"
+    kitchen: "q.cmd.kitchen"
+    kitchen-dlq: "q.cmd.kitchen.dlq"

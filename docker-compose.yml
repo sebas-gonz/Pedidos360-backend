@@ -1,4 +1,32 @@
+version: '3.8'
+
 services:
+  activemq1:
+    image: rmohr/activemq:latest
+    container_name: pedidos360-activemq1
+    ports:
+      - "61616:61616"
+      - "8161:8161"
+    environment:
+      - ACTIVEMQ_OPTS_MEMORY=-Xms64m -Xmx256m
+    volumes:
+      - ./activemq.xml:/opt/activemq/conf/activemq.xml
+    networks:
+      - pedidos-net
+
+  activemq2:
+    image: rmohr/activemq:latest
+    container_name: pedidos360-activemq2
+    ports:
+      - "61617:61616"
+      - "8162:8161"
+    environment:
+      - ACTIVEMQ_OPTS_MEMORY=-Xms64m -Xmx256m
+    volumes:
+      - ./activemq.xml:/opt/activemq/conf/activemq.xml
+    networks:
+      - pedidos-net
+
   bff:
     image: sebagnz/ms-pedidos360-bff:latest
     container_name: bff
@@ -8,14 +36,16 @@ services:
       - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
       - CLIENTS_ORDERS_URL=http://order:8081
       - CATALOG_URL=http://catalog:8082
+      - NOTIFY_URL=http://notify:8083
+      - REPORT_URL=http://report:8084
+      - AUDIT_URL=http://audit:8085
+      - CLIENTS_NOTIFY_URL=http://notify:8083
+      - CLIENTS_REPORT_URL=http://report:8084
+      - CLIENTS_AUDIT_URL=http://audit:8085
       - SPRING_PROFILES_ACTIVE=clients-url
-      - NOTIFY_URL=http://localhost:8083
-      - REPORT_URL=http://localhost:8084
-      - AUDIT_URL=http://localhost:8085
-      - CLIENTS_NOTIFY_URL=http://localhost:8083
-      - CLIENTS_REPORT_URL=http://localhost:8084
-      - CLIENTS_AUDIT_URL=http://localhost:8085
     restart: always
+    networks:
+      - pedidos-net
 
   order:
     image: sebagnz/ms-pedidos360-order:latest
@@ -24,12 +54,18 @@ services:
       - "8081:8081"
     environment:
       - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
-      - DB_URL=postgresql://${RDS_ENDPOINT}:5432/ms-orders?currentSchema=orders&sslMode=REQUIRE
-      - SPRING_PROFILES_ACTIVE=client-url
+      - SPRING_R2DBC_URL=r2dbc:postgresql://${RDS_ENDPOINT}:5432/ms-orders?schema=orders&sslMode=REQUIRE
+      - SPRING_FLYWAY_URL=jdbc:postgresql://${RDS_ENDPOINT}:5432/ms-orders?currentSchema=orders&sslmode=require
       - DB_USER=${RDS_USER}
       - DB_PASSWORD=${RDS_PASSWORD}
-      - CATALOG_URL=http://catalog:8082
+      - SPRING_ACTIVEMQ_BROKER_URL=failover:(tcp://activemq1:61616,tcp://activemq2:61616)?randomize=false
+      - APP_CLIENTS_CATALOG_URL=http://catalog:8082
+      - APP_CLIENTS_NOTIFY_URL=http://notify:8083
+      - APP_CLIENTS_AUDIT_URL=http://audit:8085
+      - APP_CLIENTS_REPORT_URL=http://report:8084
     restart: always
+    networks:
+      - pedidos-net
 
   catalog:
     image: sebagnz/ms-pedidos360-catalog:latest
@@ -38,7 +74,50 @@ services:
       - "8082:8082"
     environment:
       - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
-      - DB_URL=postgresql://${RDS_ENDPOINT}:5432/ms-catalog?currentSchema=catalog&sslMode=REQUIRE
+      - SPRING_R2DBC_URL=r2dbc:postgresql://${RDS_ENDPOINT}:5432/ms-catalog?schema=catalog&sslMode=REQUIRE
+      - SPRING_FLYWAY_URL=jdbc:postgresql://${RDS_ENDPOINT}:5432/ms-catalog?currentSchema=catalog&sslmode=require
       - DB_USER=${RDS_USER}
       - DB_PASSWORD=${RDS_PASSWORD}
+    networks:
+      - pedidos-net
     restart: always
+
+  notify:
+    image: sebagnz/ms-pedidos360-notify:latest
+    container_name: notify
+    ports:
+      - "8083:8083"
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
+      - MAIL_PASSWORD=${GMAIL_APP_PASSWORD}
+      - SPRING_ACTIVEMQ_BROKER_URL=tcp://activemq2:61616
+    depends_on:
+      - activemq1
+      - activemq2
+    networks:
+      - pedidos-net
+    restart: always
+
+  audit:
+    image: sebagnz/ms-pedidos360-audit:latest
+    container_name: audit
+    ports:
+      - "8085:8085"
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
+      - SPRING_R2DBC_URL=r2dbc:postgresql://${RDS_ENDPOINT}:5432/ms-audit?schema=audit&sslMode=REQUIRE
+      - SPRING_FLYWAY_URL=jdbc:postgresql://${RDS_ENDPOINT}:5432/ms-audit?currentSchema=audit&sslmode=require
+      - DB_USER=${RDS_USER}
+      - DB_PASSWORD=${RDS_PASSWORD}
+      - SPRING_ACTIVEMQ_BROKER_URL=failover:(tcp://activemq1:61616,tcp://activemq2:61616)?randomize=false
+      - ACTIVEMQ_JOLOKIA_URL=http://activemq1:8161/api/jolokia
+    depends_on:
+      - activemq1
+      - activemq2
+    networks:
+      - pedidos-net
+    restart: always
+
+networks:
+  pedidos-net:
+    driver: bridge

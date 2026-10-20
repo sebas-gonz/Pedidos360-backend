@@ -15,7 +15,7 @@ public class AuditOrderListener {
     private final ObjectMapper objectMapper;
     private final AuditServcieImpl auditService;
 
-    @JmsListener(destination = "Consumer.audit.VirtualTopic.Orders")
+    @JmsListener(destination = "${broker.topics.orders}")
     public void listenToOrderEvents(String eventJson) {
         try {
             AuditIngestDTO evento = objectMapper.readValue(eventJson, AuditIngestDTO.class);

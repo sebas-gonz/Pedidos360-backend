@@ -45,6 +45,9 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.POST, "/api/orders").hasAnyRole("Cliente", "Operador", "Admin")
                         .pathMatchers(HttpMethod.GET, "/api/orders/users/*").hasAnyRole("Cliente", "Operador", "Admin")
 
+                        .pathMatchers("/api/notification/**").permitAll()
+
+                        .pathMatchers("/api/audits/**").permitAll()
                         .anyExchange().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2

@@ -25,6 +25,7 @@ import com.seb.pedidos360.order.rest.ReportClient;
 import com.seb.pedidos360.order.services.contracts.OrderService;
 import jakarta.jms.Topic;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.stereotype.Service;
@@ -53,6 +54,19 @@ public class OrderServiceImpl implements OrderService {
     private final JmsTemplate ttlJmsTemplate;
     private final ObjectMapper objectMapper;
     private final Topic orderEventsTopic;
+
+
+    @Value("${broker.queues.email}")
+    private String emailQueueName;
+
+    @Value("${broker.queues.kitchen}")
+    private String kitchenQueueName;
+
+    @Value("${broker.queues.invoice}")
+    private String invoiceQueueName;
+
+    @Value("${broker.topics.orders}")
+    private String orderEventsTopicName;
 
     @Override
     @Transactional
@@ -128,9 +142,9 @@ public class OrderServiceImpl implements OrderService {
                                                 String invoice = objectMapper.writeValueAsString(notifyInvoiceDTO);
                                                 String auditMessage = objectMapper.writeValueAsString(auditDTO);
 
-                                                ttlJmsTemplate.convertAndSend(ActivemqConfig.KITCHEN_QUEUE, ticketNotification);
-                                                ttlJmsTemplate.convertAndSend(ActivemqConfig.EMAIL_QUEUE, notification);
-                                                ttlJmsTemplate.convertAndSend(ActivemqConfig.INVOICE_QUEUE, invoice);
+                                                ttlJmsTemplate.convertAndSend(kitchenQueueName, ticketNotification);
+                                                ttlJmsTemplate.convertAndSend(emailQueueName, notification);
+                                                ttlJmsTemplate.convertAndSend(invoiceQueueName, invoice);
                                                 ttlJmsTemplate.convertAndSend(orderEventsTopic, auditMessage);
                                             } catch (Exception e) {
                                                 return Mono.error(new RuntimeException(e));
@@ -243,7 +257,7 @@ public class OrderServiceImpl implements OrderService {
                         String auditMessage = objectMapper.writeValueAsString(auditDTO);
 
                         ttlJmsTemplate.convertAndSend(orderEventsTopic, auditMessage);
-                        ttlJmsTemplate.convertAndSend(ActivemqConfig.EMAIL_QUEUE, notification);
+                        ttlJmsTemplate.convertAndSend(emailQueueName, notification);
                     } catch (Exception e) {
                         return Mono.error(new RuntimeException(e));
                     }
@@ -290,7 +304,7 @@ public class OrderServiceImpl implements OrderService {
                                             String auditMessage = objectMapper.writeValueAsString(audit);
 
                                             ttlJmsTemplate.convertAndSend(orderEventsTopic, auditMessage);
-                                            ttlJmsTemplate.convertAndSend(ActivemqConfig.EMAIL_QUEUE, notification);
+                                            ttlJmsTemplate.convertAndSend(emailQueueName, notification);
                                         } catch (Exception e) {
                                             return Mono.error(new RuntimeException(e));
                                         }
