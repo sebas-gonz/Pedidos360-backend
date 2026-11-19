@@ -27,9 +27,15 @@ public class CatalogClient {
                 .bodyToMono(ProductDTO.class);
     }
 
-    public Mono<Void> deductStock(List<DeductStockRequestDTO>  itemsToDeduct){
+    public Mono<Void> deductStock(List<DeductStockRequestDTO>  itemsToDeduct,
+                                  String userEmail,
+                                  String userName,
+                                  String userRole){
         return webClient.post()
                 .uri("/api/catalog/products/deduct-stock")
+                .header("X-Customer-Email", userEmail)
+                .header("X-Customer-Name", userName)
+                .header("X-User-Roles", userRole)
                 .bodyValue(itemsToDeduct)
                 .retrieve()
                 .bodyToMono(Void.class);

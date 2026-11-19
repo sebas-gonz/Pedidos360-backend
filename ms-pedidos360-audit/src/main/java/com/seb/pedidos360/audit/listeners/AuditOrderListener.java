@@ -2,26 +2,28 @@ package com.seb.pedidos360.audit.listeners;
 
 import com.seb.pedidos360.audit.dto.AuditIngestDTO;
 import com.seb.pedidos360.audit.services.AuditServcieImpl;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jms.annotation.JmsListener;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
+import reactor.core.scheduler.Schedulers;
 import tools.jackson.databind.ObjectMapper;
+
+import java.time.Duration;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class AuditOrderListener {
-    private final ObjectMapper objectMapper;
     private final AuditServcieImpl auditService;
 
-    @JmsListener(destination = "${broker.topics.orders}")
-    public void listenToOrderEvents(String eventJson) {
-        try {
-            AuditIngestDTO evento = objectMapper.readValue(eventJson, AuditIngestDTO.class);
-            auditService.ingestEvent(evento).block();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+    @KafkaListener(topics = "${kafka.topics.orders}", groupId = "au-service-group")
+    public void consumeOrderEvent(@Valid AuditIngestDTO ingestDTO) {
+        auditService.ingestEvent(ingestDTO)
+                .doOnSuccess(v -> log.debug("Métricas guardadas para el evento: {}", ingestDTO.orderUuid()))
+                .doOnError(e -> log.error("Error al procesar datos del evento {}: {}", ingestDTO.orderUuid(), e.getMessage()))
+                .block(Duration.ofSeconds(10));
     }
 }

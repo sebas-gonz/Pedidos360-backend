@@ -25,8 +25,4 @@ public class ReportController {
         return reportService.getTopProducts(range);
     }
 
-    @PostMapping("/ingest")
-    public Mono<Void> ingestEvent(@RequestBody ReportIngestDTO ingestDTO) {
-        return reportService.ingestOrderEvent(ingestDTO);
-    }
 }

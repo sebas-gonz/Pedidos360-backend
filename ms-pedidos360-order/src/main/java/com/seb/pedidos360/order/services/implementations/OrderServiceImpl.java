@@ -1,6 +1,5 @@
 package com.seb.pedidos360.order.services.implementations;
 
-import com.seb.pedidos360.order.configs.ActivemqConfig;
 import com.seb.pedidos360.order.dto.audit.AuditIngestDTO;
 import com.seb.pedidos360.order.dto.notify.NotifyInvoiceDTO;
 import com.seb.pedidos360.order.dto.notify.NotifyKitchenTicketDTO;
@@ -12,22 +11,21 @@ import com.seb.pedidos360.order.dto.order.out.OrderResponseDTO;
 import com.seb.pedidos360.order.dto.order.out.ProductItemResponseDTO;
 import com.seb.pedidos360.order.dto.product.DeductStockRequestDTO;
 import com.seb.pedidos360.order.dto.product.ProductDTO;
+import com.seb.pedidos360.order.dto.report.ProductQuantityReportDTO;
 import com.seb.pedidos360.order.dto.report.ReportIngestDTO;
 import com.seb.pedidos360.order.models.Order;
 import com.seb.pedidos360.order.models.OrderItem;
 import com.seb.pedidos360.order.models.OrderStatus;
 import com.seb.pedidos360.order.repositories.OrderItemRepository;
 import com.seb.pedidos360.order.repositories.OrderRepository;
-import com.seb.pedidos360.order.rest.AuditClient;
 import com.seb.pedidos360.order.rest.CatalogClient;
-import com.seb.pedidos360.order.rest.NotifyClient;
-import com.seb.pedidos360.order.rest.ReportClient;
 import com.seb.pedidos360.order.services.contracts.OrderService;
 import jakarta.jms.Topic;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.jms.core.JmsTemplate;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
@@ -44,16 +42,20 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
-    private final CatalogClient catalogClient;
+    //------ Repositorios ---------------
     private final OrderRepository orderRepository;
-    private final R2dbcEntityTemplate r2Template;
     private final OrderItemRepository orderItemRepository;
-    private final NotifyClient notifyClient;
-    private final ReportClient reportClient;
-    private final AuditClient auditClient;
+    //-------- Plantilla para inserciones SQL Manuales --------
+    private final R2dbcEntityTemplate r2Template;
+
+    //---------- Clientes REST de microservicios -----
+    private final CatalogClient catalogClient;
+
+    //-----------  ActiveMQ ---------------
     private final JmsTemplate ttlJmsTemplate;
     private final ObjectMapper objectMapper;
-    private final Topic orderEventsTopic;
+
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
 
     @Value("${broker.queues.email}")
@@ -65,8 +67,11 @@ public class OrderServiceImpl implements OrderService {
     @Value("${broker.queues.invoice}")
     private String invoiceQueueName;
 
-    @Value("${broker.topics.orders}")
-    private String orderEventsTopicName;
+    @Value("${kafka.topics.orders}")
+    private String reportTopicName;
+
+    @Value("${kafka.topics.audit}")
+    private String auditEventTopicName;
 
     @Override
     @Transactional
@@ -99,6 +104,8 @@ public class OrderServiceImpl implements OrderService {
                             .totalOrderAmount(totalOrdenAmount)
                             .priceCurrency(orderDTO.priceCurrency())
                             .customerId(customerId)
+                            .customerEmail(userEmail)
+                            .customerName(userName)
                             .build();
 
                     return r2Template.insert(order)
@@ -134,30 +141,29 @@ public class OrderServiceImpl implements OrderService {
                                                     "order." + savedOrder.getOrderStatus().toLowerCase(),
                                                     userEmail,
                                                     userRole,
-                                                    "Pedido " + savedOrder.getOrderStatus() + " por :" + userName);
+                                                    "Pedido CREADO por :" + userName);
+
+                                            List<ProductQuantityReportDTO> reportItems = tuples.stream()
+                                                    .map(t -> new ProductQuantityReportDTO(t.getT1().getProductUuid(), t.getT1().getQuantity())).toList();
+                                            ReportIngestDTO reportDTO = new ReportIngestDTO(savedOrder.getUuid(), savedOrder.getOrderStatus(), savedOrder.getTotalOrderAmount(), Instant.now(), reportItems);
 
                                             try {
                                                 String ticketNotification = objectMapper.writeValueAsString(ticket);
                                                 String notification = objectMapper.writeValueAsString(notifyUserDTO);
                                                 String invoice = objectMapper.writeValueAsString(notifyInvoiceDTO);
-                                                String auditMessage = objectMapper.writeValueAsString(auditDTO);
 
                                                 ttlJmsTemplate.convertAndSend(kitchenQueueName, ticketNotification);
                                                 ttlJmsTemplate.convertAndSend(emailQueueName, notification);
                                                 ttlJmsTemplate.convertAndSend(invoiceQueueName, invoice);
-                                                ttlJmsTemplate.convertAndSend(orderEventsTopic, auditMessage);
+
+                                                kafkaTemplate.send(reportTopicName, savedOrder.getUuid().toString(), reportDTO);
+                                                kafkaTemplate.send(auditEventTopicName, savedOrder.getUuid().toString(), auditDTO);
+
                                             } catch (Exception e) {
                                                 return Mono.error(new RuntimeException(e));
                                             }
-                                            List<ReportIngestDTO.ProductQuantityDTO> reportItems = tuples.stream()
-                                                    .map(t -> new ReportIngestDTO.ProductQuantityDTO(t.getT1().getProductUuid(), t.getT1().getQuantity())).toList();
-                                            ReportIngestDTO reportDTO = new ReportIngestDTO(savedOrder.getUuid(), savedOrder.getOrderStatus(), savedOrder.getTotalOrderAmount(), Instant.now(), reportItems);
 
-                                            return Mono.when(
-                                                    notifyClient.sentOrderCreatedNotification(notifyUserDTO).onErrorResume(e -> Mono.empty()),
-                                                    auditClient.ingestAudit(auditDTO).onErrorResume(e -> Mono.empty()),
-                                                    reportClient.ingestReport(reportDTO).onErrorResume(e -> Mono.empty())
-                                            ).thenReturn(orderToDTO(savedOrder, itemDTOs));
+                                            return Mono.just(orderToDTO(savedOrder, itemDTOs));
                                         });
                             });
                 });
@@ -235,15 +241,23 @@ public class OrderServiceImpl implements OrderService {
                         stockDeductionMono = orderItemRepository.findByOrderId(orderFound.getId())
                                 .map(itemOrder -> new DeductStockRequestDTO(itemOrder.getProductUuid(), itemOrder.getQuantity()))
                                 .collectList()
-                                .flatMap(catalogClient::deductStock);
+                                .flatMap(stocksToDeduce ->
+                                        catalogClient.deductStock
+                                                (
+                                                        stocksToDeduce,
+                                                        userEmail,
+                                                        userName,
+                                                        userRole
+                                                )
+                                );
                     }
                     return stockDeductionMono.then(r2Template.update(updatedOrder));
                 })
                 .flatMap(orderUpdated -> {
 
                     NotifyUserDTO notifyUserDTO = new NotifyUserDTO(
-                            userEmail,
-                            userName,
+                            orderUpdated.getCustomerEmail(),
+                            orderUpdated.getCustomerName(),
                             orderUpdated.getOrderStatus(),
                             orderUpdated.getUuid()
                     );
@@ -252,28 +266,21 @@ public class OrderServiceImpl implements OrderService {
                             userEmail,
                             userRole,
                             "Estado del pedido actualizado a " + orderUpdated.getOrderStatus() + " por :" + userName);
+                    ReportIngestDTO reportDTO = new ReportIngestDTO(orderUpdated.getUuid(), orderUpdated.getOrderStatus(), orderUpdated.getTotalOrderAmount(), Instant.now(), List.of());
                     try {
                         String notification = objectMapper.writeValueAsString(notifyUserDTO);
-                        String auditMessage = objectMapper.writeValueAsString(auditDTO);
-
-                        ttlJmsTemplate.convertAndSend(orderEventsTopic, auditMessage);
                         ttlJmsTemplate.convertAndSend(emailQueueName, notification);
+
+                        kafkaTemplate.send(auditEventTopicName, orderUpdated.getUuid().toString(), auditDTO);
+                        kafkaTemplate.send(reportTopicName, orderUpdated.getUuid().toString(), reportDTO);
                     } catch (Exception e) {
                         return Mono.error(new RuntimeException(e));
                     }
-                    ReportIngestDTO reportDTO = new ReportIngestDTO(orderUpdated.getUuid(),
-                            orderUpdated.getOrderStatus(),
-                            orderUpdated.getTotalOrderAmount(),
-                            Instant.now(), List.of());
 
-                    return Mono.when(
-                                    reportClient.ingestReport(reportDTO).onErrorResume(e -> Mono.empty())
-                            )
-                            .then(orderItemRepository.findByOrderId(orderUpdated.getId())
-                                    .flatMap(orderItem -> catalogClient.getProductByUuid(orderItem.getProductUuid())
-                                            .map(productDTO -> itemOrderToDTO(orderItem, productDTO)))
-                                    .collectList()
-                            )
+                    return orderItemRepository.findByOrderId(orderUpdated.getId())
+                            .flatMap(orderItem -> catalogClient.getProductByUuid(orderItem.getProductUuid())
+                                    .map(productDTO -> itemOrderToDTO(orderItem, productDTO)))
+                            .collectList()
                             .map(orderItems -> orderToDTO(orderUpdated, orderItems));
                 });
     }
@@ -287,24 +294,27 @@ public class OrderServiceImpl implements OrderService {
                     return orderRepository.save(canceledOrder)
                             .flatMap(orderCanceled -> {
                                         NotifyUserDTO notifyUserDTO = new NotifyUserDTO(
-                                                userEmail,
-                                                userName,
+                                                orderCanceled.getCustomerEmail(),
+                                                orderCanceled.getCustomerName(),
                                                 canceledOrder.getOrderStatus(),
                                                 canceledOrder.getUuid()
                                         );
                                         AuditIngestDTO audit = new AuditIngestDTO(
-                                                orderFound.getUuid(),
+                                                orderCanceled.getUuid(),
                                                 "order.canceled",
                                                 userEmail,
                                                 userRole,
                                                 "Pedido cancelado por: " + userName
                                         );
+
+                                        ReportIngestDTO reportDTO = new ReportIngestDTO(orderCanceled.getUuid(), orderCanceled.getOrderStatus(), orderCanceled.getTotalOrderAmount(), Instant.now(), List.of());
+
                                         try {
                                             String notification = objectMapper.writeValueAsString(notifyUserDTO);
-                                            String auditMessage = objectMapper.writeValueAsString(audit);
-
-                                            ttlJmsTemplate.convertAndSend(orderEventsTopic, auditMessage);
                                             ttlJmsTemplate.convertAndSend(emailQueueName, notification);
+
+                                            kafkaTemplate.send(auditEventTopicName, orderCanceled.getUuid().toString(), audit);
+                                            kafkaTemplate.send(reportTopicName, orderCanceled.getUuid().toString(), reportDTO);
                                         } catch (Exception e) {
                                             return Mono.error(new RuntimeException(e));
                                         }
@@ -326,15 +336,11 @@ public class OrderServiceImpl implements OrderService {
                                                                    Instant fromDate,
                                                                    Instant toDate) {
         return orderRepository.filterOrderByDates(fromDate, toDate, status)
-                .flatMap(orders -> {
-                    return orderItemRepository.findByOrderId(orders.getId())
-                            .flatMap(orderItem -> {
-                                return catalogClient.getProductByUuid(orderItem.getProductUuid())
-                                        .map(productDTO -> itemOrderToDTO(orderItem, productDTO));
-                            })
-                            .collectList()
-                            .map(orderItems -> orderToDTO(orders, orderItems));
-                });
+                .flatMap(orders -> orderItemRepository.findByOrderId(orders.getId())
+                        .flatMap(orderItem -> catalogClient.getProductByUuid(orderItem.getProductUuid())
+                                .map(productDTO -> itemOrderToDTO(orderItem, productDTO)))
+                        .collectList()
+                        .map(orderItems -> orderToDTO(orders, orderItems)));
     }
 
     @Override

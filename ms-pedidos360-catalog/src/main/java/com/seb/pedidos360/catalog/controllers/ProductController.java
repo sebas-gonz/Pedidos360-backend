@@ -1,13 +1,16 @@
 package com.seb.pedidos360.catalog.controllers;
 
-import com.seb.pedidos360.catalog.dto.CreateProductRequestDTO;
-import com.seb.pedidos360.catalog.dto.DeductStockRequestDTO;
-import com.seb.pedidos360.catalog.dto.UpdateProductRequestDTO;
+import com.seb.pedidos360.catalog.dto.product.input.CreateProductRequestDTO;
+import com.seb.pedidos360.catalog.dto.product.input.DeductStockRequestDTO;
+import com.seb.pedidos360.catalog.dto.product.input.UpdateProductRequestDTO;
+import com.seb.pedidos360.catalog.dto.product.output.ProductResponseDTO;
 import com.seb.pedidos360.catalog.models.Product;
 import com.seb.pedidos360.catalog.services.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -22,18 +25,18 @@ import java.util.UUID;
 @RequestMapping("/api/catalog")
 @RequiredArgsConstructor
 public class ProductController {
-    private final ProductService  productService;
+    private final ProductService productService;
 
     @GetMapping("/products")
-    public Flux<Product> getAllProducts(ServerWebExchange exchange) {
+    public Flux<ProductResponseDTO> getAllProducts(ServerWebExchange exchange) {
         return productService.getAllProducts();
     }
 
     @GetMapping("/products/{uuid}")
-    public Mono<ResponseEntity<Product>> getProductByUuid(@PathVariable("uuid") UUID uuid, ServerWebExchange exchange) {
+    public Mono<ResponseEntity<ProductResponseDTO>> getProductByUuid(@PathVariable("uuid") UUID uuid, ServerWebExchange exchange) {
         return productService.getProductByUuid(uuid)
                 .map(product -> {
-                    String etag = product.getVersion().toString();
+                    String etag = product.version().toString();
                     if (exchange.checkNotModified(etag)) {
                         return ResponseEntity.status(HttpStatus.NOT_MODIFIED).build();
                     }
@@ -43,25 +46,34 @@ public class ProductController {
                 });
     }
 
-    @PostMapping("/products")
-    public Mono<ResponseEntity<Product>> createProduct(@RequestBody CreateProductRequestDTO productDTO, ServerWebExchange exchange) {
-        return productService.saveProduct(productDTO)
+    @PostMapping(value = "/products", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Mono<ResponseEntity<ProductResponseDTO>> createProduct(@RequestPart("product") CreateProductRequestDTO productDTO,
+                                                       @RequestPart("images") Flux<FilePart> imageFiles,
+                                                       @RequestHeader("X-Customer-Email") String customerEmail,
+                                                       @RequestHeader("X-Customer-Name") String customerName,
+                                                       @RequestHeader("X-User-Roles") String userRole,
+                                                       ServerWebExchange exchange) {
+        return productService.saveProduct(productDTO, imageFiles, customerEmail, customerName, userRole)
                 .map(savedProduct -> {
                     URI location = UriComponentsBuilder.fromUri(exchange.getRequest().getURI())
                             .path("/{uuid}")
-                            .buildAndExpand(savedProduct.getUuid())
+                            .buildAndExpand(savedProduct.productUuid())
                             .toUri();
                     return ResponseEntity.created(location)
-                            .eTag(savedProduct.getVersion().toString())
+                            .eTag(savedProduct.version().toString())
                             .body(savedProduct);
                 });
     }
 
     @PutMapping("/products/{uuid}")
-    public Mono<ResponseEntity<Product>> updateProduct(@PathVariable("uuid") UUID uuid,@RequestBody UpdateProductRequestDTO updatedProductDTO, ServerWebExchange exchange){
-        return productService.updateProduct(updatedProductDTO, uuid)
+    public Mono<ResponseEntity<ProductResponseDTO>> updateProduct(@PathVariable("uuid") UUID uuid, @RequestBody UpdateProductRequestDTO updatedProductDTO,
+                                                       @RequestHeader("X-Customer-Email") String customerEmail,
+                                                       @RequestHeader("X-Customer-Name") String customerName,
+                                                       @RequestHeader("X-User-Roles") String userRole,
+                                                       ServerWebExchange exchange) {
+        return productService.updateProduct(updatedProductDTO, uuid, customerEmail, customerName, userRole)
                 .map(updatedProduct -> {
-                    String etag = updatedProduct.getVersion().toString();
+                    String etag = updatedProduct.version().toString();
                     if (exchange.checkNotModified(etag)) {
                         return ResponseEntity.status(HttpStatus.NOT_MODIFIED).build();
                     }
@@ -72,7 +84,10 @@ public class ProductController {
     }
 
     @PostMapping("/products/deduct-stock")
-    public Flux<Product> deductStock(@RequestBody List<DeductStockRequestDTO> itemsToDeduct) {
-        return productService.deductStock(itemsToDeduct);
+    public Flux<ProductResponseDTO> deductStock(@RequestBody List<DeductStockRequestDTO> itemsToDeduct,
+                                     @RequestHeader("X-Customer-Email") String customerEmail,
+                                     @RequestHeader("X-Customer-Name") String customerName,
+                                     @RequestHeader("X-User-Roles") String userRole) {
+        return productService.deductStock(itemsToDeduct,  customerEmail, customerName, userRole);
     }
 }

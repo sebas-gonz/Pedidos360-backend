@@ -1,4 +1,4 @@
-package com.seb.pedidos360.catalog.dto;
+package com.seb.pedidos360.catalog.dto.product.input;
 
 import java.util.UUID;
 

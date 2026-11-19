@@ -1,4 +1,4 @@
-package com.seb.pedidos360.catalog.dto;
+package com.seb.pedidos360.catalog.dto.product.input;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;

@@ -1,4 +1,14 @@
 spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKER_URL:localhost:9092,localhost:9093,localhost:9094}
+    consumer:
+      group-id: report-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+
   application:
     name: ms-pedidos360-report
   r2dbc:
@@ -26,3 +36,7 @@ logging:
     org:
       springframework:
         r2dbc: DEBUG
+kafka:
+  topics:
+    orders: orders.events
+

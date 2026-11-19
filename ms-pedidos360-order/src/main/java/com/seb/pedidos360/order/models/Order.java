@@ -1,5 +1,6 @@
 package com.seb.pedidos360.order.models;
 
+import jakarta.validation.constraints.Email;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
 import org.springframework.data.annotation.Id;
@@ -28,6 +29,13 @@ public class Order extends BaseEntity{
 
     @Column("order_status")
     private String orderStatus;
+
+    @Column("customer_email")
+    @Email
+    private String customerEmail;
+
+    @Column("customer_name")
+    private String customerName;
 
     @Column("status_number")
     @Builder.Default
