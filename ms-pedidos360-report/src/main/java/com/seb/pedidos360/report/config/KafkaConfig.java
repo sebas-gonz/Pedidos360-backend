@@ -35,8 +35,8 @@ public class KafkaConfig implements KafkaListenerConfigurer {
     @Bean
     public NewTopic auditDltTopic() {
         return TopicBuilder.name(orderEvents + ".DLT")
-                .partitions(1)
-                .replicas(1)
+                .partitions(3)
+                .replicas(3)
                 .build();
     }
 
@@ -47,7 +47,7 @@ public class KafkaConfig implements KafkaListenerConfigurer {
                 (record, ex) -> {
                     log.error("Mensaje fallido en tópico [{}] offset {}. Enviando a DLT {}.DLT. Motivo: {}",
                             record.topic(), record.offset(), record.topic(), ex.getMessage());
-                    return new TopicPartition(record.topic() + ".DLT", 0);
+                    return new TopicPartition(record.topic() + ".DLT", record.partition());
                 }
         );
 

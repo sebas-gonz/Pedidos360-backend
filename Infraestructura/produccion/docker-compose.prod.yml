@@ -1,0 +1,255 @@
+x-kafka-env: &kafka-env
+  CLUSTER_ID: "4L6g3nShT-eMCtK--X86sw"
+  KAFKA_PROCESS_ROLES: "broker,controller"
+  KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka1:29093,2@kafka2:29093,3@kafka3:29093"
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
+  KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+  KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+  KAFKA_HEAP_OPTS: "-Xms256m -Xmx256m"
+
+services:
+  # ================== Apache ActiveMQ
+  activemq-init:
+    image: alpine:latest
+    container_name: pedidos360-activemq-init
+    command: ["sh", "-c", "chmod -R 777 /opt/activemq/data/kahadb"]
+    volumes:
+      - activemq-kahadb:/opt/activemq/data/kahadb
+
+  activemq1:
+    image: rmohr/activemq:latest
+    container_name: pedidos360-activemq1
+    depends_on:
+      activemq-init:
+        condition: service_completed_successfully
+    ports:
+      - "61616:61616"
+      - "8161:8161"
+    environment:
+      - ACTIVEMQ_OPTS_MEMORY=-Xms64m -Xmx256m
+    volumes:
+      - ./activemq.xml:/opt/activemq/conf/activemq.xml
+      - activemq-kahadb:/opt/activemq/data/kahadb
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/61616' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+    networks:
+      - pedidos-net
+
+  activemq2:
+    image: rmohr/activemq:latest
+    container_name: pedidos360-activemq2
+    depends_on:
+      activemq1:
+        condition: service_healthy
+    ports:
+      - "61617:61616"
+      - "8162:8161"
+    environment:
+      - ACTIVEMQ_OPTS_MEMORY=-Xms64m -Xmx256m
+    volumes:
+      - ./activemq.xml:/opt/activemq/conf/activemq.xml
+      - activemq-kahadb:/opt/activemq/data/kahadb
+    restart: unless-stopped
+    networks:
+      - pedidos-net
+
+  # ============== Apache Kafka
+  kafka1:
+    image: apache/kafka:3.9.0
+    container_name: pedidos360-kafka1
+    hostname: kafka1
+    environment:
+      <<: *kafka-env
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:29093"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://kafka1:29092,EXTERNAL://localhost:9092"
+    restart: unless-stopped
+    networks:
+      - pedidos-net
+
+  kafka2:
+    image: apache/kafka:3.9.0
+    container_name: pedidos360-kafka2
+    hostname: kafka2
+    environment:
+      <<: *kafka-env
+      KAFKA_NODE_ID: 2
+      KAFKA_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9093,CONTROLLER://:29093"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://kafka2:29092,EXTERNAL://localhost:9093"
+    restart: unless-stopped
+    networks:
+      - pedidos-net
+
+  kafka3:
+    image: apache/kafka:3.9.0
+    container_name: pedidos360-kafka3
+    hostname: kafka3
+    environment:
+      <<: *kafka-env
+      KAFKA_NODE_ID: 3
+      KAFKA_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9094,CONTROLLER://:29093"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://kafka3:29092,EXTERNAL://localhost:9094"
+    restart: unless-stopped
+    networks:
+      - pedidos-net
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: pedidos360-kafka-ui
+    ports:
+      - "8090:8080"
+    environment:
+      - JAVA_OPTS=-Xms128m -Xmx256m
+      - KAFKA_CLUSTERS_0_NAME=Pedidos360-Cluster
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka1:29092,kafka2:29092,kafka3:29092
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+    restart: unless-stopped
+    networks:
+      - pedidos-net
+
+  # ============ Microservicios
+  bff:
+    image: sebagnz/ms-pedidos360-bff:latest
+    container_name: bff
+    ports:
+      - "8080:8080"
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
+      - SPRING_PROFILES_ACTIVE=clients-url
+      - FRONTEND_URL=${FRONTEND_URL}
+      - ORDERS_URL=http://order:8081
+      - CATALOG_URL=http://catalog:8082
+      - NOTIFY_URL=http://notify:8083
+      - REPORT_URL=http://report:8084
+      - AUDIT_URL=http://audit:8085
+      - ADMINISTRATOR_URL=http://administrator:8086
+    restart: always
+    networks:
+      - pedidos-net
+
+  order:
+    image: sebagnz/ms-pedidos360-order:latest
+    container_name: order
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
+      - SPRING_R2DBC_URL=r2dbc:postgresql://${RDS_ENDPOINT}:5432/ms-orders?schema=orders&sslMode=REQUIRE
+      - SPRING_FLYWAY_URL=jdbc:postgresql://${RDS_ENDPOINT}:5432/ms-orders?currentSchema=orders&sslmode=require
+      - DB_USER=${RDS_USER}
+      - DB_PASSWORD=${RDS_PASSWORD}
+      - KAFKA_BROKER_URL=kafka1:29092,kafka2:29092,kafka3:29092
+      - ACTIVEMQ_BROKER_URL=failover:(tcp://activemq1:61616,tcp://activemq2:61616)?randomize=false
+      - APP_CLIENTS_CATALOG_URL=http://catalog:8082
+    depends_on:
+      - activemq1
+      - kafka1
+      - kafka2
+      - kafka3
+    restart: always
+    networks:
+      - pedidos-net
+
+  catalog:
+    image: sebagnz/ms-pedidos360-catalog:latest
+    container_name: catalog
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
+      - SPRING_R2DBC_URL=r2dbc:postgresql://${RDS_ENDPOINT}:5432/ms-catalog?schema=catalog&sslMode=REQUIRE
+      - SPRING_FLYWAY_URL=jdbc:postgresql://${RDS_ENDPOINT}:5432/ms-catalog?currentSchema=catalog&sslmode=require
+      - DB_USER=${RDS_USER}
+      - DB_PASSWORD=${RDS_PASSWORD}
+      - KAFKA_BROKER_URL=kafka1:29092,kafka2:29092,kafka3:29092
+      - CLOUDINARY_URL=${CLOUDINARY_URL}
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+    restart: always
+    networks:
+      - pedidos-net
+
+  notify:
+    image: sebagnz/ms-pedidos360-notify:latest
+    container_name: notify
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
+      - MAIL_PASSWORD=${GMAIL_APP_PASSWORD}
+      - ACTIVEMQ_BROKER_URL=failover:(tcp://activemq1:61616,tcp://activemq2:61616)?randomize=false
+    depends_on:
+      - activemq1
+      - activemq2
+    restart: always
+    networks:
+      - pedidos-net
+
+  report:
+    image: sebagnz/ms-pedidos360-report:latest
+    container_name: report
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
+      - SPRING_R2DBC_URL=r2dbc:postgresql://${RDS_ENDPOINT}:5432/ms-reports?schema=reports&sslMode=REQUIRE
+      - SPRING_FLYWAY_URL=jdbc:postgresql://${RDS_ENDPOINT}:5432/ms-reports?currentSchema=reports&sslmode=require
+      - DB_USER=${RDS_USER}
+      - DB_PASSWORD=${RDS_PASSWORD}
+      - KAFKA_BROKER_URL=kafka1:29092,kafka2:29092,kafka3:29092
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+    restart: always
+    networks:
+      - pedidos-net
+
+  audit:
+    image: sebagnz/ms-pedidos360-audit:latest
+    container_name: audit
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
+      - SPRING_R2DBC_URL=r2dbc:postgresql://${RDS_ENDPOINT}:5432/ms-audit?schema=audit&sslMode=REQUIRE
+      - SPRING_FLYWAY_URL=jdbc:postgresql://${RDS_ENDPOINT}:5432/ms-audit?currentSchema=audit&sslmode=require
+      - DB_USER=${RDS_USER}
+      - DB_PASSWORD=${RDS_PASSWORD}
+      - KAFKA_BROKER_URL=kafka1:29092,kafka2:29092,kafka3:29092
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+    restart: always
+    networks:
+      - pedidos-net
+
+  administrator:
+    image: sebagnz/ms-pedidos360-administrator:latest
+    container_name: administrator
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
+      - KAFKA_BROKER_URL=kafka1:29092,kafka2:29092,kafka3:29092
+      - ACTIVEMQ_JOLOKIA_URL=http://activemq1:8161/api/jolokia,http://activemq2:8161/api/jolokia
+      - ACTIVEMQ_USER=admin
+      - ACTIVEMQ_PASSWORD=admin
+      - ACTIVEMQ_BROKER_NAME=localhost
+    depends_on:
+      - activemq1
+      - activemq2
+      - kafka1
+      - kafka2
+      - kafka3
+    restart: always
+    networks:
+      - pedidos-net
+
+volumes:
+  activemq-kahadb:
+
+networks:
+  pedidos-net:
+    driver: bridge

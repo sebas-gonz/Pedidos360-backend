@@ -2,5 +2,6 @@
 target/
 *.jar
 *.log
-Infraestructura/Docker/.env
+Infraestructura/produccion/.env
 **/.env
+.sh

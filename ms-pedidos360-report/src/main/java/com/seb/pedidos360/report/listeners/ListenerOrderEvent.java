@@ -14,8 +14,9 @@ import java.time.Duration;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class ConsumeOrderEvent {
+public class ListenerOrderEvent {
     private final ReportService reportService;
+
     @KafkaListener(topics = "${kafka.topics.orders}", groupId = "report-service-group")
     public void consumeOrderEvent(@Valid ReportIngestDTO ingestDTO) {
         reportService.ingestOrderEvent(ingestDTO)
