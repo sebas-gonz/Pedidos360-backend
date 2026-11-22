@@ -13,7 +13,7 @@ spring:
           ssl:
             enable: true
   activemq:
-    broker-url: tcp://${ACTIVEMQ_BROKER_URL:localhost:61617}
+    broker-url: ${ACTIVEMQ_BROKER_URL:failover:(tcp://localhost:61616,tcp://localhost:61617)?randomize=false}
     user: admin
     password: admin
 

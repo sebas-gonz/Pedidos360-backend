@@ -90,7 +90,7 @@ services:
     environment:
       - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m
       - MAIL_PASSWORD=${GMAIL_APP_PASSWORD}
-      - SPRING_ACTIVEMQ_BROKER_URL=tcp://activemq2:61616
+      - SPRING_ACTIVEMQ_BROKER_URL=failover:(tcp://activemq1:61616,tcp://activemq2:61616)?randomize=false
     depends_on:
       - activemq1
       - activemq2

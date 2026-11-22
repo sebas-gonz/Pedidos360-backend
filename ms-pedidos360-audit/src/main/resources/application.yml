@@ -2,18 +2,30 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BROKER_URL:localhost:9092,localhost:9093,localhost:9094}
     consumer:
-      group-id: report-service-group
+      group-id: audit-service-group
       auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
+        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
         spring.json.trusted.packages: "*"
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: com.seb.pedidos360.audit.dto.AuditIngestDTO
+        partition.assignment.strategy: org.apache.kafka.clients.consumer.CooperativeStickyAssignor
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+    listener:
+      ack-mode: record
+      concurrency: 3
+
 
   application:
     name: ms-pedidos360-audit
 
   r2dbc:
-    url: r2dbc:${DB_URL:postgresql://localhost:5432/ms-audit?scheme=audit}
+    url: r2dbc:${DB_URL:postgresql://localhost:5432/ms-audit?schema=audit}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:root}
 
@@ -29,23 +41,15 @@ spring:
     ansi:
       enabled: always
 
-  activemq:
-    broker-url: tcp://${ACTIVEMQ_BROKER_URL:localhost:61617}
-    user: admin
-    password: admin
 
 logging:
   level:
-    org:
-      springframework:
-        r2dbc: DEBUG
+    org.springframework.r2dbc: DEBUG
+    io.r2dbc.postgresql.PARAM: DEBUG
 
 server:
   port: 8085
 
-broker:
-  topics:
-    orders: "VirtualTopic.Orders"
 
 kafka:
   topics:

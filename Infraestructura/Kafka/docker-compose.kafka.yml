@@ -1,99 +1,73 @@
-
-x-zookeeper-env: &zookeeper-env
-  ZOO_SERVERS: zookeeper1:2888:3888,zookeeper2:2888:3888,zookeeper3:2888:3888
-  ALLOW_ANONYMOUS_LOGIN: "yes"
-
-x-zookeeper-common: &zookeeper-common
-  image: bitnami/zookeeper:3.8
-
 x-kafka-env: &kafka-env
-  KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper1:2181,zookeeper2:2181,zookeeper3:2181
-  ALLOW_PLAINTEXT_LISTENER: "yes"
-  KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
-  KAFKA_CFG_INTER_BROKER_LISTENER_NAME: INTERNAL
-
-x-kafka-common: &kafka-common
-  image: bitnami/kafka:3.4
-  depends_on:
-    - zookeeper1
-    - zookeeper2
-    - zookeeper3
+  CLUSTER_ID: "4L6g3nShT-eMCtK--X86sw"
+  KAFKA_PROCESS_ROLES: "broker,controller"
+  KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka1:29093,2@kafka2:29093,3@kafka3:29093"
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
+  KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+  KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+  KAFKA_HEAP_OPTS: "-Xms256m -Xmx256m"
 
 services:
-  # Nodos Zookeeper
-  zookeeper1:
-    <<: *zookeeper-common
-    container_name: pedidos360-zookeeper1
-    environment:
-      <<: *zookeeper-env
-      ZOO_SERVER_ID: 1
-
-  zookeeper2:
-    <<: *zookeeper-common
-    container_name: pedidos360-zookeeper2
-    environment:
-      <<: *zookeeper-env
-      ZOO_SERVER_ID: 2
-
-  zookeeper3:
-    <<: *zookeeper-common
-    container_name: pedidos360-zookeeper3
-    environment:
-      <<: *zookeeper-env
-      ZOO_SERVER_ID: 3
-
-  # Nodos Brokers Kafka
   kafka1:
-    <<: *kafka-common
+    image: apache/kafka:3.9.0
     container_name: pedidos360-kafka1
+    hostname: kafka1
     ports:
       - "9092:9092"
     environment:
       <<: *kafka-env
-      KAFKA_BROKER_ID: 1
-      KAFKA_CFG_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092
-      KAFKA_CFG_ADVERTISED_LISTENERS: INTERNAL://kafka1:29092,EXTERNAL://localhost:9092
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:29093"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://kafka1:29092,EXTERNAL://localhost:9092"
+    networks:
+      - pedidos-net
 
   kafka2:
-    <<: *kafka-common
+    image: apache/kafka:3.9.0
     container_name: pedidos360-kafka2
+    hostname: kafka2
     ports:
       - "9093:9093"
     environment:
       <<: *kafka-env
-      KAFKA_BROKER_ID: 2
-      KAFKA_CFG_LISTENERS: INTERNAL://:29093,EXTERNAL://:9093
-      KAFKA_CFG_ADVERTISED_LISTENERS: INTERNAL://kafka2:29093,EXTERNAL://localhost:9093
+      KAFKA_NODE_ID: 2
+      KAFKA_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9093,CONTROLLER://:29093"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://kafka2:29092,EXTERNAL://localhost:9093"
+    networks:
+      - pedidos-net
 
   kafka3:
-    <<: *kafka-common
+    image: apache/kafka:3.9.0
     container_name: pedidos360-kafka3
+    hostname: kafka3
     ports:
       - "9094:9094"
     environment:
       <<: *kafka-env
-      KAFKA_BROKER_ID: 3
-      KAFKA_CFG_LISTENERS: INTERNAL://:29094,EXTERNAL://:9094
-      KAFKA_CFG_ADVERTISED_LISTENERS: INTERNAL://kafka3:29094,EXTERNAL://localhost:9094
+      KAFKA_NODE_ID: 3
+      KAFKA_LISTENERS: "INTERNAL://:29092,EXTERNAL://:9094,CONTROLLER://:29093"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://kafka3:29092,EXTERNAL://localhost:9094"
+    networks:
+      - pedidos-net
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: pedidos360-kafka-ui
     ports:
-      - "8080:8080"
+      - "8090:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: "Pedidos360-Cluster"
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: "kafka1:29092,kafka2:29093,kafka3:29094"
-      KAFKA_CLUSTERS_0_ZOOKEEPER: "zookeeper1:2181,zookeeper2:2181,zookeeper3:2181"
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: "kafka1:29092,kafka2:29092,kafka3:29092"
     depends_on:
       - kafka1
       - kafka2
       - kafka3
+    networks:
+      - pedidos-net
 
-  kafka-init:
-    image: bitnami/kafka:3.4
-    container_name: pedidos360-kafka-init
-    depends_on:
-      - kafka1
-      - kafka2
-      - kafka3
+networks:
+  pedidos-net:
+    external: true

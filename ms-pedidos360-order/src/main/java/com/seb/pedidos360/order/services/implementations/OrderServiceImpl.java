@@ -85,7 +85,7 @@ public class OrderServiceImpl implements OrderService {
                             OrderItem orderItem = OrderItem.builder()
                                     .priceCurrency(productDTO.priceCurrency())
                                     .quantity(orderListRequestDTO.quantity())
-                                    .productUuid(productDTO.productUuid())
+                                    .productUuid(orderListRequestDTO.productUuid())
                                     .totalItemAmount(totalItemProduct)
                                     .build();
 
@@ -137,7 +137,8 @@ public class OrderServiceImpl implements OrderService {
                                             NotifyKitchenTicketDTO ticket = new NotifyKitchenTicketDTO(savedOrder.getUuid(), savedOrder.getOrderStatus(), itemsTicket);
                                             NotifyUserDTO notifyUserDTO = new NotifyUserDTO(userEmail, userName, order.getOrderStatus(), order.getUuid());
                                             NotifyInvoiceDTO notifyInvoiceDTO = new NotifyInvoiceDTO(savedOrder.getUuid(), customerId, userName, userEmail, totalOrdenAmount, savedOrder.getPriceCurrency());
-                                            AuditIngestDTO auditDTO = new AuditIngestDTO(order.getUuid(),
+
+                                            AuditIngestDTO auditDTO = new AuditIngestDTO(savedOrder.getUuid(),
                                                     "order." + savedOrder.getOrderStatus().toLowerCase(),
                                                     userEmail,
                                                     userRole,

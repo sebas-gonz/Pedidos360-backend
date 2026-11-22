@@ -1,0 +1,25 @@
+spring:
+    application:
+        name: ms-pedidos360-administrator
+    kafka:
+      bootstrap-servers: ${KAFKA_BROKER_URL:localhost:9092,localhost:9093,localhost:9094}
+      admin:
+        properties:
+          request.timeout.ms: 10000
+          default.api.timeout.ms: 10000
+
+
+
+server:
+  port: 8086
+
+activemq:
+  jolokia:
+    url: ${ACTIVEMQ_JOLOKIA_URL:http://localhost:8161/api/jolokia,http://localhost:8162/api/jolokia}
+    username: ${ACTIVEMQ_USER:admin}
+    password: ${ACTIVEMQ_PASSWORD:admin}
+    broker-name: ${ACTIVEMQ_BROKER_NAME:localhost}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

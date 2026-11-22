@@ -7,8 +7,16 @@ spring:
     main:
       web-application-type: reactive
 
+    kafka:
+      bootstrap-servers: ${KAFKA_BROKER_URL:localhost:9092,localhost:9093,localhost:9094}
+      producer:
+        key-serializer: org.apache.kafka.common.serialization.StringSerializer
+        value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+        properties:
+          spring.json.add.type.headers: false
+
     r2dbc:
-      url: r2dbc:${DB_URL:postgresql://localhost:5432/ms-catalog?scheme=catalog}
+      url: r2dbc:${DB_URL:postgresql://localhost:5432/ms-catalog?schema=catalog}
       username: ${DB_USER:postgres}
       password: ${DB_PASSWORD:root}
 
@@ -31,3 +39,8 @@ spring:
 
 cloudinary:
   credentials: ${CLOUDINARY_URL}
+
+kafka:
+  topics:
+    orders: orders.events
+    audit: audit.timeline

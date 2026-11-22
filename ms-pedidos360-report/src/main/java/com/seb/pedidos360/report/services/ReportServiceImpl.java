@@ -53,10 +53,10 @@ public class ReportServiceImpl implements ReportService {
         return orderRepository.findByOrderUuid(ingestDTO.orderUuid())
                 .flatMap(existingOrder -> {
                     existingOrder.setStatus(ingestDTO.status());
-                    if ("ENTREGADO".equals(ingestDTO.status())) {
+                    if ("DELIVERED".equals(ingestDTO.status())) {
                         existingOrder.setDeliveredAt(ingestDTO.timestamp());
                     }
-                    return orderRepository.save(existingOrder).then();
+                    return orderRepository.save(existingOrder);
                 })
                 .switchIfEmpty(Mono.defer(() -> {
                     ReportOrder newOrder = ReportOrder.builder()
@@ -75,9 +75,10 @@ public class ReportServiceImpl implements ReportService {
                                                 .quantity(item.quantity())
                                                 .build())
                                         .toList();
-                                return itemRepository.saveAll(items).then();
+                                return itemRepository.saveAll(items).then(Mono.just(savedOrder));
                             });
-                }));
+                }))
+                .then();
     }
 
     private Instant calculateSinceDate(String range) {

@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public record AuditIngestDTO(
         @NotNull(message = "El UUID de la entidad no puede ser nulo")
-        UUID orderUuid,
+        UUID uuid,
 
         @NotBlank(message = "El tipo de evento es obligatorio")
         String eventType,

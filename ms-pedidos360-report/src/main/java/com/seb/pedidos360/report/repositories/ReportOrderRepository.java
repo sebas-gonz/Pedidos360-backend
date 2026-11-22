@@ -20,10 +20,10 @@ public interface ReportOrderRepository extends ReactiveCrudRepository<ReportOrde
     @Query("SELECT COALESCE(SUM(total_amount), 0) FROM reports.report_orders WHERE created_at >= :since")
     Mono<BigDecimal> sumSalesSince(Instant since);
 
-    @Query("SELECT COUNT(id) FROM reports.report_orders WHERE status NOT IN ('ENTREGADO', 'CANCELADO')")
+    @Query("SELECT COUNT(id) FROM reports.report_orders WHERE status NOT IN ('DELIVERED', 'CANCELLED')")
     Mono<Long> countActiveOrders();
 
     @Query("SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (delivered_at - created_at)) / 60), 0) " +
-            "FROM reports.report_orders WHERE status = 'ENTREGADO' AND created_at >= :since")
+            "FROM reports.report_orders WHERE status = 'DELIVERED' AND created_at >= :since")
     Mono<Double> averageLeadTimeSince(Instant since);
 }

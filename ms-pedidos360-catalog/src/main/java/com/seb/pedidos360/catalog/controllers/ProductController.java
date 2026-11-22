@@ -46,7 +46,7 @@ public class ProductController {
                 });
     }
 
-    @PostMapping(value = "/products", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/create-product", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Mono<ResponseEntity<ProductResponseDTO>> createProduct(@RequestPart("product") CreateProductRequestDTO productDTO,
                                                        @RequestPart("images") Flux<FilePart> imageFiles,
                                                        @RequestHeader("X-Customer-Email") String customerEmail,

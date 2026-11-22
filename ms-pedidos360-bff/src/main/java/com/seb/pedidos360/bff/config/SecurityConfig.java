@@ -48,6 +48,8 @@ public class SecurityConfig {
                         .pathMatchers("/api/notification/**").permitAll()
 
                         .pathMatchers("/api/audits/**").permitAll()
+                        //Panel de administracion de Apache ActiveMQ y Apache Kafka
+                        .pathMatchers("/api/admin/**").hasRole("Admin")
                         .anyExchange().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2

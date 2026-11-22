@@ -32,8 +32,10 @@ import java.io.FileOutputStream;
 @Slf4j
 public class NotifyServiceImpl implements NotifyService {
     private final JavaMailSender mailSender;
-    private final Sinks.Many<NotifyKitchenTicketDTO> ticketsNotification = Sinks.many().multicast().onBackpressureBuffer();
-    private final Sinks.Many<NotifyUserDTO> usersNotification = Sinks.many().multicast().onBackpressureBuffer();
+    private final Sinks.Many<NotifyKitchenTicketDTO> ticketsNotification =
+            Sinks.many().multicast().directBestEffort();
+    private final Sinks.Many<NotifyUserDTO> usersNotification =
+            Sinks.many().multicast().directBestEffort();
 
     @Override
     public Mono<Void> sendEmailNotification(NotifyUserDTO notificationDTO) {

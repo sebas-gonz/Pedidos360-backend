@@ -3,14 +3,13 @@ spring:
     bootstrap-servers: ${KAFKA_BROKER_URL:localhost:9092,localhost:9093,localhost:9094}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
 
 
   application:
     name: ms-pedidos360-order
 
   r2dbc:
-    # Usamos ?schema= en lugar de ?currentSchema= para R2DBC
     url: r2dbc:${DB_URL:postgresql://localhost:5432/ms-orders}?schema=orders
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:root}

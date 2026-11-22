@@ -44,7 +44,12 @@
                 <policyEntries>
                     <policyEntry queue=">">
                         <deadLetterStrategy>
-                            <individualDeadLetterStrategy queueSuffix=".dlq" useQueueForQueueMessages="true"/>
+                            <individualDeadLetterStrategy
+                                    queuePrefix=""
+                                    queueSuffix=".dlq"
+                                    useQueueForQueueMessages="true"
+                                    processExpired="true"
+                                    processNonPersistent="true"/>
                         </deadLetterStrategy>
                     </policyEntry>
                     <policyEntry topic=">">
@@ -133,9 +138,11 @@
                   class="org.apache.activemq.hooks.SpringContextHook"/>
         </shutdownHooks>
 
-        <networkConnectors>
-            <networkConnector name="bridge-to-node2" uri="static:(tcp://pedidos360-activemq2:61616)" duplex="true"/>
-        </networkConnectors>
+        <destinations>
+            <queue physicalName="q.cmd.kitchen.dlq" />
+            <queue physicalName="q.cmd.email.dlq" />
+            <queue physicalName="q.cmd.invoice.dlq" />
+        </destinations>
     </broker>
 
     <!--

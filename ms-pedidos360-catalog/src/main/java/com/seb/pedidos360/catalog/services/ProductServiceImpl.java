@@ -53,10 +53,6 @@ public class ProductServiceImpl implements ProductService {
                             .map(productSaved -> {
                                 AuditDTO auditDTO = new AuditDTO(productSaved.getUuid(), "New Product Created", userEmail, userRole,
                                         "Product Created by: " + userName);
-                                ReportDTO reportDTO = new ReportDTO(productSaved.getUuid(), "Product Created", productSaved.getPrice(), Instant.now(),
-                                        List.of(new ProductQuantityReportDTO(productSaved.getUuid(), productSaved.getStock().intValue())));
-
-                                kafkaTemplate.send(reportTopicName, productSaved.getUuid().toString(), reportDTO);
                                 kafkaTemplate.send(auditEventTopicName, productSaved.getUuid().toString(), auditDTO);
 
                                 return productMapper.toDTO(productSaved);
@@ -75,10 +71,7 @@ public class ProductServiceImpl implements ProductService {
                             .map(productUpdated -> {
                                 AuditDTO auditDTO = new AuditDTO(productUpdated.getUuid(), "Product Updated", userEmail, userRole,
                                         "Product Updated By: " + userName);
-                                ReportDTO reportDTO = new ReportDTO(productUpdated.getUuid(), "Product Created", productUpdated.getPrice(), Instant.now(),
-                                        List.of(new ProductQuantityReportDTO(productUpdated.getUuid(), productUpdated.getStock().intValue())));
 
-                                kafkaTemplate.send(reportTopicName, productUpdated.getUuid().toString(), reportDTO);
                                 kafkaTemplate.send(auditEventTopicName, productUpdated.getUuid().toString(), auditDTO);
                                 return productMapper.toDTO(productUpdated);
                             });
@@ -114,10 +107,6 @@ public class ProductServiceImpl implements ProductService {
                                 AuditDTO auditDTO = new AuditDTO(product.getUuid(), "Reduced stock product ", userEmail, userRole,
                                         "Stock reduced by: " + deductStockRequestDTO.quantity() + ", by: " + userName);
 
-                                ReportDTO reportDTO = new ReportDTO(product.getUuid(), "Reduced Stock", product.getPrice(), Instant.now(),
-                                        List.of(new ProductQuantityReportDTO(product.getUuid(), product.getStock().intValue())));
-
-                                kafkaTemplate.send(reportTopicName, product.getUuid().toString(), reportDTO);
                                 kafkaTemplate.send(auditEventTopicName, product.getUuid().toString(), auditDTO);
 
                                 return r2Template.update(product)

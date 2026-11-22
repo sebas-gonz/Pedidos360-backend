@@ -19,11 +19,11 @@ import java.time.Duration;
 public class AuditOrderListener {
     private final AuditServcieImpl auditService;
 
-    @KafkaListener(topics = "${kafka.topics.orders}", groupId = "au-service-group")
+    @KafkaListener(topics = "${kafka.topics.orders}", groupId = "audit-service-group")
     public void consumeOrderEvent(@Valid AuditIngestDTO ingestDTO) {
         auditService.ingestEvent(ingestDTO)
-                .doOnSuccess(v -> log.debug("Métricas guardadas para el evento: {}", ingestDTO.orderUuid()))
-                .doOnError(e -> log.error("Error al procesar datos del evento {}: {}", ingestDTO.orderUuid(), e.getMessage()))
+                .doOnSuccess(v -> log.debug("Métricas guardadas para el evento: {}", ingestDTO.uuid()))
+                .doOnError(e -> log.error("Error al procesar datos del evento {}: {}", ingestDTO.uuid(), e.getMessage()))
                 .block(Duration.ofSeconds(10));
     }
 }

@@ -9,3 +9,5 @@ clients:
     url: ${REPORT_URL:http://localhost:8084}
   audit:
     url: ${AUDIT_URL:http://localhost:8085}
+  administrator:
+    url: ${ADMINISTRATOR_URL:http://localhost:8086}

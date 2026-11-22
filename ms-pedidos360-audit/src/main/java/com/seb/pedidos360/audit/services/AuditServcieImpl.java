@@ -23,7 +23,7 @@ public class AuditServcieImpl {
 
     public Mono<Void> ingestEvent(AuditIngestDTO dto) {
         AuditEvent event = AuditEvent.builder()
-                .orderUuid(dto.orderUuid())
+                .orderUuid(dto.uuid())
                 .eventType(dto.eventType())
                 .userEmail(dto.userEmail())
                 .userRole(dto.userRole())

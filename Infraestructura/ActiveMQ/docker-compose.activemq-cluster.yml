@@ -9,21 +9,34 @@ services:
       - ACTIVEMQ_OPTS_MEMORY=-Xms64m -Xmx256m
     volumes:
       - ./activemq.xml:/opt/activemq/conf/activemq.xml
+      - activemq-kahadb:/opt/activemq/data/kahadb
+    healthcheck:
+      test: [ "CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/61616' || exit 1" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     networks:
       - activemq-net
 
   activemq2:
     image: rmohr/activemq:latest
     container_name: pedidos360-activemq2
+    depends_on:
+      activemq1:
+        condition: service_healthy
     ports:
       - "61617:61616"
       - "8162:8161"
+
     environment:
       - ACTIVEMQ_OPTS_MEMORY=-Xms64m -Xmx256m
     volumes:
       - ./activemq.xml:/opt/activemq/conf/activemq.xml
+      - activemq-kahadb:/opt/activemq/data/kahadb
     networks:
       - activemq-net
+volumes:
+    activemq-kahadb:
 
 networks:
   activemq-net:

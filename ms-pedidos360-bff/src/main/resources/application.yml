@@ -1,11 +1,14 @@
 spring:
-    application:
-        name: ms-pedidos360-bff
-    security:
-      oauth2:
-        resourceserver:
-          jwt:
-            issuer-uri: https://login.microsoftonline.com/38d3da59-de9f-41b2-8e22-64e7660d479d/v2.0
-            audiences: api://3e4f2a5e-fc6f-465b-bece-9a036469797d
+  application:
+    name: ms-pedidos360-bff
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://login.microsoftonline.com/38d3da59-de9f-41b2-8e22-64e7660d479d/v2.0
+          audiences: 3e4f2a5e-fc6f-465b-bece-9a036469797d
+  http:
+    codecs:
+      max-in-memory-size: 10MB
 
 

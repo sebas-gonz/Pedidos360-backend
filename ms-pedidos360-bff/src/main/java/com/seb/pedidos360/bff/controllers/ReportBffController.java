@@ -30,12 +30,7 @@ public class ReportBffController {
     @GetMapping("/top-products")
     public Flux<Object> getTopProducts(@RequestParam(defaultValue = "last7d") String range) {
         return webClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .scheme("http")
-                        .host(reportUrl.replace("http://", ""))
-                        .path("/api/report/top-products")
-                        .queryParam("range", range)
-                        .build())
+                .uri(reportUrl + "/api/reports/top-products?range={range}", range)
                 .retrieve()
                 .bodyToFlux(Object.class);
     }

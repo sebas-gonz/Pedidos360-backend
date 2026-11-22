@@ -5,14 +5,24 @@ spring:
       group-id: report-service-group
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
         spring.json.trusted.packages: "*"
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: com.seb.pedidos360.report.dto.ReportIngestDTO
+        partition.assignment.strategy: org.apache.kafka.clients.consumer.CooperativeStickyAssignor
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+    listener:
+      ack-mode: record
+      concurrency: 3
 
   application:
     name: ms-pedidos360-report
   r2dbc:
-    url: r2dbc:${DB_URL:postgresql://localhost:5432/ms-reports?search_path=reports}
+    url: r2dbc:${DB_URL:postgresql://localhost:5432/ms-reports?schema=reports}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:root}
 
